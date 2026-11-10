@@ -121,7 +121,10 @@ enum ProviderDispatch {
             guard try await SchemaPreparation.validate(input, against: tool.input, budget: budget) else { throw CoreFailure.invalidInput }
             if let mirror { try await mirror(tool.headers, presence, budget) }
             try context.checkCancellation()
-            if let plan = tool.rounds { result = try await InputCoordinator.execute(request, input: presence, context: context, plan: plan, protector: continuations, wire: wire, requestWork: requestWork, middleware: middleware) }
+            if let plan = tool.rounds {
+                do { result = try await InputCoordinator.execute(request, input: presence, context: context, plan: plan, protector: continuations, wire: wire, requestWork: requestWork, middleware: middleware) }
+                catch let required as ExtensionCapabilityRequired { throw try await ProtocolRejection.missingExtension(required.identifier, wire: wire, budget: budget) }
+            }
             else {
                 guard params["requestState"] == nil, params["inputResponses"] == nil else { throw CoreFailure.invalidInput }
                 do { result = try await MiddlewarePipeline.run(middleware, context: context) { try await tool.registration.handler(presence, context) } }

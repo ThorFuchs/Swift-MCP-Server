@@ -28,8 +28,9 @@ enum TaskSchemas {
     {"type":"object","required":["taskId","inputResponses"],
      "properties":{"taskId":{"type":"string","minLength":1,"maxLength":256},"inputResponses":{"type":"object","maxProperties":64}}}
     """#
-    /// `CreateTaskResult` (the registry adds the `resultType: "task"` constant).
-    static let createResult = #"{"type":"object","required":["task"],"properties":{"task":\#(task)}}"#
+    /// `CreateTaskResult = Result & Task`: the task fields sit at the top level next to
+    /// `resultType` (the registry adds the `resultType: "task"` constant).
+    static let createResult = task
     /// `GetTaskResult`: a `DetailedTask` plus `resultType: "complete"`.
     static let getResult = #"""
     {"allOf":[\#(task),
