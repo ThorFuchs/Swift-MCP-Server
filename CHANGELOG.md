@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Platforms: macOS 15+, iOS 18+ and Linux (was macOS 27 only); see ADR-0002. Linux
+  uses swift-crypto and blocks SIGPIPE on the transport's own writer thread.
+
 - Initial import of the consolidated core: `MCPProtocol`, `MCPServer`, `MCPStdio`,
   `MCPServiceLifecycle`, `MCPObservability`, `MCPServerTesting` (MCP 2026-07-28, macOS 27+).
 - HTTP transport and authorization moved to the separate Swift-MCP-Server-HTTP package.

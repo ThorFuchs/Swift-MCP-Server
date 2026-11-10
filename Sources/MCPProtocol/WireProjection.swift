@@ -2,7 +2,11 @@
 import Foundation
 import JSON
 import JSONSchema
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 
 /// A definition-specific, schema-checked projection retaining exact JSON and all
 /// permitted unknown members. No unchecked public initializer or Codable bypass.

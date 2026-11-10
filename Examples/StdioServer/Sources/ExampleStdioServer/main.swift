@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 import Foundation
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#elseif canImport(Musl)
+import Musl
+#endif
 import SystemPackage
 import JSON
 import MCPProtocol
@@ -43,6 +49,6 @@ import ExampleSupport
             guard report.joined == 1, report.failure == nil, activity.active == 0, activity.requests == 0,
                   activity.bufferedBytes == 0, activity.eventBytes == 0, transport.statistics.writerBytes == 0 else { throw CoreFailure.invalidOutput }
             FileHandle.standardError.write(Data("EXAMPLE_STOPPED joined=1 active=0\n".utf8))
-        } catch { FileHandle.standardError.write(Data("EXAMPLE_FAILED\n".utf8)); Darwin.exit(1) }
+        } catch { FileHandle.standardError.write(Data("EXAMPLE_FAILED\n".utf8)); exit(1) }
     }
 }

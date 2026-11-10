@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 import Foundation
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#elseif canImport(Musl)
+import Musl
+#endif
 import Testing
 import JSON
 import MCPProtocol
@@ -12,12 +18,12 @@ private final class ExampleChild {
     var out = Data(), err = Data()
     init(_ binary: String, arguments: [String] = [], environment: [String:String] = [:]) throws {
         process.executableURL = URL(fileURLWithPath: binary); process.arguments = arguments
-        process.currentDirectoryURL = URL(fileURLWithPath: "/private/tmp")
+        process.currentDirectoryURL = FileManager.default.temporaryDirectory
         process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
         process.standardInput = input; process.standardOutput = output; process.standardError = diagnostics
         try process.run()
         for fd in [output.fileHandleForReading.fileDescriptor, diagnostics.fileHandleForReading.fileDescriptor] { _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK) }
-        _ = fcntl(input.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
+        _ = setNoSigPipe(input.fileHandleForWriting.fileDescriptor)
     }
     func write(_ bytes: Data) throws { try input.fileHandleForWriting.write(contentsOf: bytes) }
     func eof() { try? input.fileHandleForWriting.close() }
@@ -25,7 +31,7 @@ private final class ExampleChild {
         for (fd, kind) in [(output.fileHandleForReading.fileDescriptor,0),(diagnostics.fileHandleForReading.fileDescriptor,1)] {
             var buffer = [UInt8](repeating: 0, count: 4096)
             while true {
-                let count = Darwin.read(fd, &buffer, buffer.count)
+                let count = SystemCall.read(fd, &buffer, buffer.count)
                 if count > 0 {
                     guard out.count + err.count + count <= 2097152 else { throw TestFailure.limit }
                     if kind == 0 { out.append(contentsOf: buffer.prefix(count)) } else { err.append(contentsOf: buffer.prefix(count)) }
@@ -34,7 +40,9 @@ private final class ExampleChild {
             }
         }
     }
-    func until(_ predicate: () -> Bool, seconds: Int = 60) async throws {
+    // Generous upper bound: example startup cold-prepares every frozen wire plan
+    // (about 30-40s in debug builds, more on small CI runners). Only failure latency grows.
+    func until(_ predicate: () -> Bool, seconds: Int = 180) async throws {
         let deadline = ContinuousClock.now.advanced(by: .seconds(seconds))
         while true { try pump(); if predicate() { return }; guard ContinuousClock.now < deadline else { throw TestFailure.timeout }; try await Task.sleep(for: .milliseconds(5)) }
     }
