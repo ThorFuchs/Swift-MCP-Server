@@ -77,16 +77,13 @@ private func awaitWorker(_ io: FileDescriptorIO) async throws -> UInt {
         catch { _ = pthread_sigmask(SIG_SETMASK,&previous,nil); throw error }
         #expect(pthread_sigmask(SIG_SETMASK,&previous,nil) == 0)
         // Test-host disposition only; SDK never installs process handlers.
-        var action = sigaction(), old = sigaction()
-        action.__sigaction_u.__sa_handler = { _ in }
-        sigemptyset(&action.sa_mask); action.sa_flags = 0
-        #expect(sigaction(SIGUSR1,&action,&old) == 0)
-        defer { _ = sigaction(SIGUSR1,&old,nil); io.stop() }
+        let restoreHandler = try installNoopSignalHandler(SIGUSR1)
+        defer { restoreHandler(); io.stop() }
         let task = Task { try await io.read(maximum:3,deadline:ContinuousClock.now.advanced(by:.seconds(5))) }
         let thread = try await awaitWorker(io)
         for _ in 0..<100 where io.interruptions == 0 {
             // Native pthread identity is observed while this read owns its worker.
-            #expect(pthread_kill(pthread_t(bitPattern:thread)!,SIGUSR1) == 0)
+            #expect(pthread_kill(threadHandle(thread),SIGUSR1) == 0)
             try await Task.sleep(for:.milliseconds(1))
         }
         _ = try [UInt8](arrayLiteral:1,2,3).withUnsafeBytes { try p.writeEnd.write($0) }

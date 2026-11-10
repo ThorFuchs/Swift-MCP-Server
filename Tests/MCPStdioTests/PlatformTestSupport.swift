@@ -68,3 +68,29 @@ enum SystemCall {
     static func shutdown<H: BinaryInteger>(_ fd: Int32, _ how: H) -> Int32 { Musl.shutdown(fd, Int32(how)) }
     #endif
 }
+
+/// Test host only: installs a no-op handler without SA_RESTART and returns a restore action.
+/// Darwin uses sigaction(2) with no flags. On Linux `signal(2)` suffices because poll(2) is
+/// never restarted after a handler there; it always fails with EINTR.
+func installNoopSignalHandler(_ number: Int32) throws -> () -> Void {
+    #if canImport(Darwin)
+    var action = sigaction(), old = sigaction()
+    action.__sigaction_u.__sa_handler = { _ in }
+    sigemptyset(&action.sa_mask); action.sa_flags = 0
+    guard sigaction(number, &action, &old) == 0 else { throw Errno(rawValue: errno) }
+    return { var previous = old; _ = sigaction(number, &previous, nil) }
+    #else
+    // A failed installation shows up as missing interruptions in the calling test.
+    let previous = signal(number, { _ in })
+    return { _ = signal(number, previous) }
+    #endif
+}
+
+/// `pthread_t` for a recorded thread identity: a pointer on Darwin and musl, an integer on Glibc.
+func threadHandle(_ identity: UInt) -> pthread_t {
+    #if canImport(Glibc)
+    return pthread_t(identity)
+    #else
+    return pthread_t(bitPattern: identity)!
+    #endif
+}
