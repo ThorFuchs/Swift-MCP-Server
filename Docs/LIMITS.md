@@ -28,12 +28,13 @@ remain caller-owned. These logical bounds do not assert measured RSS or throughp
 
 
 ServerConfiguration.preparation selects one finite cumulative account per initial
-catalog or replacement. Defaults remain256Mwork,128Mcompilation,32Mevaluation and
-8Mnumeric/regex compilation/regex aggregate. All fields must be positive, at most
-total, with total capped at1billion. A richer trusted host may choose a larger
+catalog or replacement. Defaults are 512M work, 256M compilation, 64M evaluation and
+8M numeric/regex compilation/regex aggregate. This keeps about 2x headroom over a cold
+preparation of every frozen definition a server needs (measured: 112M work, 107M
+compilation, 31M evaluation). `ColdPreparationBudgetTests` fails once a cold
+preparation would use more than 75% of any default. All fields must be positive, at most
+total, with total capped at 1 billion. A richer trusted host may choose a larger
 explicit profile; each helper still uses that account and unchanged stage ceilings.
-The conformance catalog requires a larger cold evaluation allowance than defaults;
-failed cold and successful warm attempts remain separate evidence, never a reset.
 
 Envelope inspection uses a separate finite admission controller with the configured
 activeRequests/queuedRequests ceilings. It shares the server's cumulative request

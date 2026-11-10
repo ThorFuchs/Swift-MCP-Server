@@ -57,13 +57,6 @@ Design notes are in [`Docs/`](Docs).
 
 ## Known issues
 
-Both regressions below are carried over from the pre-1.0 line and must be fixed before RC1:
-
-- With default limits, `Server.make` fails at startup: compiling the frozen schema exceeds the
-  `evaluationWorkUnits` budget by one unit (294,660 vs 294,659). Every subprocess and example
-  test therefore fails (15 tests). This is independent of the Swift-JSON version (1.7.0 and 1.8.0).
-- `StateEventsTests.replaceableEventsCoalesceBehindAcknowledgementAndLateTokenCannotEmit`
-  fails deterministically.
 - Some design documents still refer to the retired gate process (Q01–Q11, P00–P12).
 
 ## License

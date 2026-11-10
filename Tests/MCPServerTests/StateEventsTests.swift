@@ -543,10 +543,14 @@ extension EventCases {
             try await group.waitForAll()
         }
         let frames = try await recorder.snapshot.map { try v05json(String(decoding:$0,as:UTF8.self)) }
-        #expect(frames.count == 3)
+        // Server-initiated teardown: the dated cancellation rules require notifications/cancelled
+        // for the listen request on every transport, followed by the graceful complete result.
+        try #require(frames.count == 4)
         #expect(frames[0].objectValue?["method"]?.stringValue == "notifications/subscriptions/acknowledged")
         #expect(frames[1].objectValue?["method"]?.stringValue == "notifications/tools/list_changed")
-        #expect(frames[2].objectValue?["result"] != nil)
+        #expect(frames[2].objectValue?["method"]?.stringValue == "notifications/cancelled")
+        #expect(try frames[2].objectValue?["params"]?.objectValue?["requestId"]?.numberValue?.integer(as:Int.self,limits:.balanced) == 70)
+        #expect(frames[3].objectValue?["result"]?.objectValue?["resultType"]?.stringValue == "complete")
         await v05clean(server)
         let escaped = Mutex<RequestContext?>(nil)
         let tool = ToolRegistration(definition:try v05json(#"{"name":"late","inputSchema":{"type":"object"}}"#)) { _,context in

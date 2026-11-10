@@ -63,11 +63,11 @@ func effectivePolicyBoundaryTriples(_ field: String) throws {
     case "claimEntries": limit = 65536; make = { n in _ = try StateConsumptionStore(maximumEntries: Int(n), maximumKeyBytes: 32, now: { 1000 }) }
     case "claimKeyBytes": limit = 16384; make = { n in _ = try StateConsumptionStore(maximumKeyBytes: Int(n), now: { 1000 }) }
     case "preparationWork": limit = 1000000000; make = { n in _ = try ServerPreparationPolicy(work: UInt64(n)) }
-    case "preparationNumeric": limit = 256000000; make = { n in _ = try ServerPreparationPolicy(numeric: UInt64(n)) }
-    case "preparationCompilation": limit = 256000000; make = { n in _ = try ServerPreparationPolicy(compilation: UInt64(n)) }
-    case "preparationEvaluation": limit = 256000000; make = { n in _ = try ServerPreparationPolicy(evaluation: UInt64(n)) }
-    case "preparationRegexCompilation": limit = 256000000; make = { n in _ = try ServerPreparationPolicy(regexCompilation: UInt64(n)) }
-    case "preparationRegexAggregate": limit = 256000000; make = { n in _ = try ServerPreparationPolicy(regexAggregate: UInt64(n)) }
+    case "preparationNumeric": limit = 512000000; make = { n in _ = try ServerPreparationPolicy(numeric: UInt64(n)) }
+    case "preparationCompilation": limit = 512000000; make = { n in _ = try ServerPreparationPolicy(compilation: UInt64(n)) }
+    case "preparationEvaluation": limit = 512000000; make = { n in _ = try ServerPreparationPolicy(evaluation: UInt64(n)) }
+    case "preparationRegexCompilation": limit = 512000000; make = { n in _ = try ServerPreparationPolicy(regexCompilation: UInt64(n)) }
+    case "preparationRegexAggregate": limit = 512000000; make = { n in _ = try ServerPreparationPolicy(regexAggregate: UInt64(n)) }
     default: throw CoreFailure.invalidPolicy
     }
     try make(limit - 1); try make(limit)
