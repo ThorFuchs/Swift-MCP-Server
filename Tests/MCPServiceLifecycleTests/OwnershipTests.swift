@@ -266,7 +266,7 @@ private func component(_ name: String, dependencies: [String] = [], log: LifeLog
     }
     @Test func unixPeerEOFRejectsRetainedDescriptionAndObservesClosedPeer() async throws {
         var pair: [Int32] = [-1, -1]
-        try #require(socketpair(AF_UNIX, SOCK_STREAM, 0, &pair) == 0)
+        try #require(socketpair(AF_UNIX, testStreamSocketType, 0, &pair) == 0)
         defer { _ = Darwin.close(pair[1]) }
         var held = fcntl(pair[0], F_DUPFD_CLOEXEC, 0)
         try #require(held >= 0)
@@ -285,7 +285,7 @@ private func component(_ name: String, dependencies: [String] = [], log: LifeLog
             catalog:ServerCatalog(),cursors:CursorProtector(keys:[.init(identifier:ScalarText("lifecycle"),material:Data(repeating:1,count:32))],active:ScalarText("lifecycle"),clock:{1000}))
         let principal = VerifiedPrincipal(subject:ScalarText("stdio"),issuer:ScalarText("host"),resource:ScalarText("mcp"),scopes:[])
         for _ in 0..<4 {
-            var pair: [Int32] = [-1,-1]; #expect(socketpair(AF_UNIX,SOCK_STREAM,0,&pair) == 0)
+            var pair: [Int32] = [-1,-1]; #expect(socketpair(AF_UNIX, testStreamSocketType, 0,&pair) == 0)
             let output = fcntl(pair[0],F_DUPFD_CLOEXEC,0)
             // This caller-owned witness keeps the exact socket description alive.
             // Integer FD values may be reassigned by unrelated concurrent tests

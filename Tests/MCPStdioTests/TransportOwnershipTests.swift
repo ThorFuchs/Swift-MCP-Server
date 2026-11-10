@@ -164,7 +164,7 @@ private func awaitWorker(_ io: FileDescriptorIO) async throws -> UInt {
         #expect(getNoSigPipe(q.writeEnd.rawValue) == 0)
         #endif
         var sockets: [Int32] = [-1,-1]
-        #expect(socketpair(AF_UNIX,SOCK_STREAM,0,&sockets) == 0)
+        #expect(socketpair(AF_UNIX, testStreamSocketType, 0,&sockets) == 0)
         defer { for fd in sockets { _ = Darwin.close(fd) } }
         var option = linger(l_onoff:1,l_linger:2)
         #expect(setsockopt(sockets[0],SOL_SOCKET,SO_LINGER,&option,socklen_t(MemoryLayout<linger>.size)) == 0)
@@ -199,7 +199,7 @@ private func awaitWorker(_ io: FileDescriptorIO) async throws -> UInt {
     @Test func nativeSocketHalfCloseDrainsOneModernResponse() async throws {
         let server = try await ownershipServer()
         var pair: [Int32] = [-1,-1]
-        #expect(socketpair(AF_UNIX,SOCK_STREAM,0,&pair) == 0)
+        #expect(socketpair(AF_UNIX, testStreamSocketType, 0,&pair) == 0)
         let serverOutput = fcntl(pair[0],F_DUPFD_CLOEXEC,0)
         let peer = pair[1]
         defer { _ = Darwin.close(peer) }

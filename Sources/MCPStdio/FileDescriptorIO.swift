@@ -168,7 +168,7 @@ final class FileDescriptorIO: Sendable {
         guard info.st_mode & S_IFMT == S_IFIFO || info.st_mode & S_IFMT == S_IFSOCK else { throw StdioFailure.unsupportedDescriptor }
         if info.st_mode & S_IFMT == S_IFSOCK {
             var kind: Int32 = 0, count = socklen_t(MemoryLayout<Int32>.size)
-            guard getsockopt(raw,SOL_SOCKET,SO_TYPE,&kind,&count) == 0, kind == SOCK_STREAM else { throw StdioFailure.unsupportedDescriptor }
+            guard getsockopt(raw,SOL_SOCKET,SO_TYPE,&kind,&count) == 0, kind == streamSocketType else { throw StdioFailure.unsupportedDescriptor }
             // SO_LINGER can make close block despite O_NONBLOCK. Never move
             // that host-configured blocking close onto a cooperative executor.
             var option = linger(), size = socklen_t(MemoryLayout<linger>.size)
@@ -231,7 +231,7 @@ final class FileDescriptorIO: Sendable {
                         guard !value.busy else { throw StdioFailure.ioBusy }; value.busy = true
                     }
                     let accepted = queue.submit { [self] in
-                        state.withLock { $0.worker = UInt(bitPattern:pthread_self()) }
+                        state.withLock { $0.worker = currentThreadIdentity() }
                         let result: Result<T, any Error>
                         do { result = .success(try operation(cancelled)) } catch { result = .failure(error) }
                         state.withLock { value in value.busy = false; value.worker = 0; if value.stopped { release(&value) } }
@@ -331,6 +331,25 @@ extension FileDescriptorIO {
         }
         return pair
     }
+}
+
+/// `SOCK_STREAM` as an `Int32`; Glibc imports it as the `__socket_type` enum.
+let streamSocketType: Int32 = {
+    #if canImport(Glibc)
+    return Int32(SOCK_STREAM.rawValue)
+    #else
+    return SOCK_STREAM
+    #endif
+}()
+
+/// Opaque identity of the calling thread (diagnostics only). `pthread_t` is a
+/// pointer on Darwin and musl but an integer on Glibc.
+func currentThreadIdentity() -> UInt {
+    #if canImport(Glibc)
+    return UInt(pthread_self())
+    #else
+    return UInt(bitPattern: pthread_self())
+    #endif
 }
 
 /// Darwin uses the per-open-file `F_NOSIGPIPE` flag configured by the owner.
