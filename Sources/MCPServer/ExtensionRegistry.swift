@@ -20,8 +20,16 @@ public struct ExtensionRequest: Sendable {
     public let method: ScalarText, parametersSchema: JSON, resultTypes: Set<ScalarText>, requiredScopes: Set<ScalarText>
     public let rounds: MultiRoundProvider?
     let handler: ProviderHandler?
+    /// Official extensions only: schema of a `resultType: "complete"` result
+    /// (for example `tasks/get`), used instead of declared supplemental result types.
+    package private(set) var completeResultSchema: JSON?
     public init(method: ScalarText, parametersSchema: JSON, resultTypes: Set<ScalarText>, requiredScopes: Set<ScalarText> = [], handler: @escaping ProviderHandler) {
         self.method = method; self.parametersSchema = parametersSchema; self.resultTypes = resultTypes; self.requiredScopes = requiredScopes; self.handler = handler; rounds = nil
+    }
+    /// Official extensions only: a request whose result is the standard `complete` shape.
+    package init(method: ScalarText, parametersSchema: JSON, completeResultSchema: JSON, requiredScopes: Set<ScalarText> = [], handler: @escaping ProviderHandler) {
+        self.method = method; self.parametersSchema = parametersSchema; self.resultTypes = []; self.requiredScopes = requiredScopes
+        self.handler = handler; rounds = nil; self.completeResultSchema = completeResultSchema
     }
     /// Explicit multi-round semantics; no custom method inherits the three core methods' privilege.
     public init(method: ScalarText, parametersSchema: JSON, resultTypes: Set<ScalarText>, requiredScopes: Set<ScalarText> = [], rounds: MultiRoundProvider) {
@@ -32,10 +40,26 @@ public struct ExtensionRegistration: Sendable {
     public let identifier: ScalarText, settingsSchema: JSON
     public let capabilities: JSON?
     public let requests: [ExtensionRequest], results: [ExtensionResult], inputs: [ExtensionInput], notifications: [ExtensionNotification]
+    /// Official MCP extensions only: names the specification reserves outside the
+    /// namespace (for example `tasks/get` and `resultType: "task"`). Not public API.
+    package private(set) var reservedNames: Set<ScalarText> = []
+    /// Official extension with reserved names; non-negotiated calls to its requests
+    /// fail with `-32021` (missing required client capability) instead of method-not-found.
+    package init(official identifier: ScalarText, settingsSchema: JSON, capabilities: JSON? = nil, reservedNames: Set<ScalarText>,
+        requests: [ExtensionRequest] = [], results: [ExtensionResult] = [], notifications: [ExtensionNotification] = []) {
+        self.init(identifier: identifier, settingsSchema: settingsSchema, capabilities: capabilities, requests: requests, results: results, notifications: notifications)
+        self.reservedNames = reservedNames
+    }
     public init(identifier: ScalarText, settingsSchema: JSON, capabilities: JSON? = nil, requests: [ExtensionRequest] = [], results: [ExtensionResult] = [], inputs: [ExtensionInput] = [], notifications: [ExtensionNotification] = []) {
         self.identifier = identifier; self.settingsSchema = settingsSchema; self.capabilities = capabilities
         self.requests = requests; self.results = results; self.inputs = inputs; self.notifications = notifications
     }
+}
+/// Thrown by a provider that cannot serve the request unless the client declares the
+/// named extension; the server answers `-32021` naming that extension.
+public struct ExtensionCapabilityRequired: Error, Sendable, Equatable {
+    public let identifier: ScalarText
+    public init(_ identifier: ScalarText) { self.identifier = identifier }
 }
 struct PreparedExtensionInput: Sendable {
     let namespace: ScalarText, request: PreparedSchema, response: PreparedSchema
@@ -48,6 +72,8 @@ struct PreparedExtensionNotification: Sendable {
 }
 struct PreparedExtensionRequest: Sendable {
     let namespace: ScalarText, registration: ExtensionRequest, parameters: PreparedSchema, headers: [HeaderDeclaration], rounds: PreparedRoundPlan?
+    var reserved = false
+    var completeResult: PreparedSchema? = nil
 }
 struct ExtensionRegistry: Sendable {
     struct Entry: Sendable { let identifier: ScalarText, schema: PreparedSchema, capabilities: JSON }
@@ -59,11 +85,11 @@ struct ExtensionRegistry: Sendable {
         var names = Set<ScalarText>(), methods = Set<ScalarText>(), entries: [Entry] = [], weight: UInt64 = 0, forms = 0
         var requests: [ScalarText: PreparedExtensionRequest] = [:], results: [ScalarText: PreparedExtensionResult] = [:]
         var inputs: [ScalarText: PreparedExtensionInput] = [:], notifications: [ScalarText: PreparedExtensionNotification] = [:]
-        func name(_ value: ScalarText, namespace: ScalarText) throws {
+        func name(_ value: ScalarText, namespace: ScalarText, reserved: Set<ScalarText> = []) throws {
             let bytes = value.description.utf8
+            let scoped = value.description.hasPrefix(namespace.description + "/") && value.description.count > namespace.description.count + 1
             guard !bytes.isEmpty, bytes.count <= 256, bytes.allSatisfy({ $0 > 32 && $0 < 127 }),
-                  value.description.hasPrefix(namespace.description + "/"), value.description.count > namespace.description.count + 1,
-                  WireMethod(rawValue: value.description) == nil else { throw CoreFailure.invalidInput }
+                  scoped || reserved.contains(value), WireMethod(rawValue: value.description) == nil else { throw CoreFailure.invalidInput }
         }
         func prepare(_ raw: JSON) async throws -> PreparedSchema {
             var limits = JSONLimits.balanced; limits[.outputBytes] = 262144
@@ -90,7 +116,7 @@ struct ExtensionRegistry: Sendable {
             weight += metadataWeight
             entries.append(.init(identifier: item.identifier, schema: try await prepare(item.settingsSchema), capabilities: capabilities))
             for result in item.results {
-                try name(result.type, namespace: item.identifier)
+                try name(result.type, namespace: item.identifier, reserved: item.reservedNames)
                 guard results[result.type] == nil, result.coreMethods.isSubset(of: [.callTool, .readResource, .getPrompt]) else { throw CoreFailure.invalidInput }
                 let constant = try await RuntimeJSON.object([.init("const", value: .string(result.type.description))], budget: budget)
                 let props = try await RuntimeJSON.object([.init("resultType", value: constant)], budget: budget)
@@ -104,13 +130,14 @@ struct ExtensionRegistry: Sendable {
                 inputs[input.method] = .init(namespace: item.identifier, request: try await prepare(input.requestSchema), response: try await prepare(input.responseSchema))
             }
             for notification in item.notifications {
-                try name(notification.method, namespace: item.identifier)
+                try name(notification.method, namespace: item.identifier, reserved: item.reservedNames)
                 guard methods.insert(notification.method).inserted else { throw CoreFailure.invalidInput }
                 notifications[notification.method] = .init(namespace: item.identifier, declaration: notification, schema: try await prepare(notification.parametersSchema))
             }
             for request in item.requests {
-                try name(request.method, namespace: item.identifier)
-                guard methods.insert(request.method).inserted, !request.resultTypes.isEmpty, request.resultTypes.count <= 16,
+                try name(request.method, namespace: item.identifier, reserved: item.reservedNames)
+                let completeOnly = request.completeResultSchema != nil && !item.reservedNames.isEmpty
+                guard methods.insert(request.method).inserted, completeOnly || !request.resultTypes.isEmpty, request.resultTypes.count <= 16,
                       request.resultTypes.allSatisfy({ results[$0]?.namespace == item.identifier }) else { throw CoreFailure.invalidInput }
                 try RuntimePolicy.scopes(request.requiredScopes)
                 let parameters = try await prepare(request.parametersSchema), headers = try await SchemaPreparation.headers(for: parameters, budget: budget)
@@ -121,7 +148,10 @@ struct ExtensionRegistry: Sendable {
                     try await PreparedRoundPlan.prepare(provider, definition: definition, scopes: request.requiredScopes, features: [], wire: wire, generation: generation, budget: budget, supplemental: inputs.filter { $0.value.namespace == item.identifier })
                 }
                 if let rounds { guard rounds.weight <= 33_554_432 - weight else { throw CoreFailure.limit }; weight += rounds.weight }
-                requests[request.method] = .init(namespace: item.identifier, registration: request, parameters: parameters, headers: headers, rounds: rounds)
+                var prepared = PreparedExtensionRequest(namespace: item.identifier, registration: request, parameters: parameters, headers: headers, rounds: rounds)
+                prepared.reserved = item.reservedNames.contains(request.method)
+                if completeOnly, let schema = request.completeResultSchema { prepared.completeResult = try await prepare(schema) }
+                requests[request.method] = prepared
             }
         }
         return .init(entries: entries, weight: weight, requests: requests, results: results, inputs: inputs, notifications: notifications)

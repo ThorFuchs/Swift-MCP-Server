@@ -8,7 +8,10 @@ enum SupplementalDispatch {
         requestWork: UInt64, middleware: [RequestMiddleware]) async throws -> JSON {
         let budget = context.budget
         try await ProviderDispatch.require(plan.registration.requiredScopes, features: [], context: context, wire: wire)
-        let application = try await RuntimeJSON.object(request.params.filter { !["_meta", "requestState", "inputResponses"].contains($0.key.string) }, budget: budget)
+        // Reserved official requests (tasks/update) carry inputResponses as their own
+        // payload rather than as a multi-round retry, so it stays application data.
+        let stripped: Set<String> = plan.reserved ? ["_meta", "requestState"] : ["_meta", "requestState", "inputResponses"]
+        let application = try await RuntimeJSON.object(request.params.filter { !stripped.contains($0.key.string) }, budget: budget)
         guard try await SchemaPreparation.validate(application, against: plan.parameters, budget: budget) else { throw CoreFailure.invalidInput }
         if let mirror { try await mirror(plan.headers, .value(application), budget) }
         let result: JSON
@@ -31,7 +34,7 @@ enum SupplementalDispatch {
             result = try await InputCoordinator.execute(request, input: .value(application), context: context, plan: rounds,
                 protector: continuations, wire: wire, requestWork: requestWork, middleware: middleware)
         } else {
-            guard request.params["requestState"] == nil, request.params["inputResponses"] == nil, let handler = plan.registration.handler else { throw CoreFailure.invalidInput }
+            guard request.params["requestState"] == nil, plan.reserved || request.params["inputResponses"] == nil, let handler = plan.registration.handler else { throw CoreFailure.invalidInput }
             result = try await MiddlewarePipeline.run(middleware, context: context) { try await handler(.value(application), context) }
         }
         try context.checkCancellation()
@@ -46,6 +49,9 @@ enum SupplementalDispatch {
         guard try await wire.validate(meta, as: .ResultMetaObject, budget: budget) else { throw CoreFailure.invalidOutput }
         if result.objectValue?["resultType"]?.stringValue == "input_required" {
             guard plan.rounds != nil, try await wire.validate(final, as: .Result, budget: budget) else { throw CoreFailure.invalidOutput }
+        } else if let complete = plan.completeResult {
+            guard result.objectValue?["resultType"]?.stringValue == "complete",
+                  try await SchemaPreparation.validate(final, against: complete, budget: budget) else { throw CoreFailure.invalidOutput }
         } else {
             guard let shape = context.extensionRegistry.result(final, method: context.method, negotiated: context.extensions),
                   try await SchemaPreparation.validate(final, against: shape.schema, budget: budget) else { throw CoreFailure.invalidOutput }

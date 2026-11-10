@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import JSON
 
-enum RuntimeJSON {
+package enum RuntimeJSON {
     struct Key: CodingKey {
         let stringValue: String
         var intValue: Int? { nil }
@@ -16,11 +16,11 @@ enum RuntimeJSON {
             for member in members { try container.encode(member.value, forKey: Key(member.key.string)) }
         }
     }
-    static func object(_ members: [JSONMember], budget: RequestBudget) async throws -> JSON {
+    package static func object(_ members: [JSONMember], budget: RequestBudget) async throws -> JSON {
         try await budget.consume(UInt64(members.reduce(0) { $0 + $1.key.string.utf8.count + 1 }))
         return try await budget.performJSON { try JSONValueEncoder(options: .init(limits: $0)).encodeWithReport(Object(members: members)) }
     }
-    static func overlay(_ value: JSON, members: [JSONMember], budget: RequestBudget) async throws -> JSON {
+    package static func overlay(_ value: JSON, members: [JSONMember], budget: RequestBudget) async throws -> JSON {
         guard let object = value.objectValue else { throw CoreFailure.invalidOutput }
         let replacing = Set(members.map { $0.key })
         try await budget.consume(UInt64(object.reduce(0) { $0 + $1.key.string.utf8.count + 1 }))
