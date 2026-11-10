@@ -31,7 +31,7 @@ private final class ExampleChild {
         for (fd, kind) in [(output.fileHandleForReading.fileDescriptor,0),(diagnostics.fileHandleForReading.fileDescriptor,1)] {
             var buffer = [UInt8](repeating: 0, count: 4096)
             while true {
-                let count = Darwin.read(fd, &buffer, buffer.count)
+                let count = SystemCall.read(fd, &buffer, buffer.count)
                 if count > 0 {
                     guard out.count + err.count + count <= 2097152 else { throw TestFailure.limit }
                     if kind == 0 { out.append(contentsOf: buffer.prefix(count)) } else { err.append(contentsOf: buffer.prefix(count)) }

@@ -165,7 +165,7 @@ private func awaitWorker(_ io: FileDescriptorIO) async throws -> UInt {
         #endif
         var sockets: [Int32] = [-1,-1]
         #expect(socketpair(AF_UNIX, testStreamSocketType, 0,&sockets) == 0)
-        defer { for fd in sockets { _ = Darwin.close(fd) } }
+        defer { for fd in sockets { _ = SystemCall.close(fd) } }
         var option = linger(l_onoff:1,l_linger:2)
         #expect(setsockopt(sockets[0],SOL_SOCKET,SO_LINGER,&option,socklen_t(MemoryLayout<linger>.size)) == 0)
         #expect(throws:StdioFailure.unsupportedDescriptor) { _ = try StdioTransport(input:.init(rawValue:sockets[0]),output:q.writeEnd,inputOwnership:.owned,outputOwnership:.owned) }
@@ -202,7 +202,7 @@ private func awaitWorker(_ io: FileDescriptorIO) async throws -> UInt {
         #expect(socketpair(AF_UNIX, testStreamSocketType, 0,&pair) == 0)
         let serverOutput = fcntl(pair[0],F_DUPFD_CLOEXEC,0)
         let peer = pair[1]
-        defer { _ = Darwin.close(peer) }
+        defer { _ = SystemCall.close(peer) }
         let transport = try StdioTransport(input:.init(rawValue:pair[0]),output:.init(rawValue:serverOutput),inputOwnership:.owned,outputOwnership:.owned)
         let readCopy = try FileDescriptorIO.duplicate(peer)
         try FileDescriptorIO.nonblocking(peer)
@@ -211,7 +211,7 @@ private func awaitWorker(_ io: FileDescriptorIO) async throws -> UInt {
         let task = Task { try await transport.run(server:server,principal:ownershipPrincipal,origin:ScalarText("socket")) }
         let request = Array(#"{"jsonrpc":"2.0","id":44,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}"#.utf8) + [10]
         #expect(try request.withUnsafeBytes { try FileDescriptor(rawValue:peer).write($0) } == request.count)
-        #expect(Darwin.shutdown(peer,SHUT_WR) == 0)
+        #expect(SystemCall.shutdown(peer,SHUT_WR) == 0)
         var bytes: [UInt8] = []
         let end = ContinuousClock.now.advanced(by:.seconds(5))
         while !bytes.contains(10) {

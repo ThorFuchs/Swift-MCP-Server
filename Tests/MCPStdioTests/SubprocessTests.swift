@@ -47,7 +47,7 @@ private enum ChildFailure: Error { case exited(String) }
     func pull(_ fd: Int32, into bytes: inout Data) throws {
         var buffer = [UInt8](repeating:0,count:4096)
         while true {
-            let n = buffer.withUnsafeMutableBytes { Darwin.read(fd,$0.baseAddress,$0.count) }
+            let n = buffer.withUnsafeMutableBytes { SystemCall.read(fd,$0.baseAddress,$0.count) }
             if n < 0 { if errno == EAGAIN || errno == EINTR { return }; throw StdioFailure.system(errno) }
             if n == 0 { return }
             guard bytes.count + n <= 2_097_152 else { throw StdioFailure.outputOverflow }
@@ -63,7 +63,7 @@ private enum ChildFailure: Error { case exited(String) }
         var offset = 0
         while offset < bytes.count {
             guard ContinuousClock.now < deadline else { throw StdioFailure.writeDeadline }
-            let n = bytes.withUnsafeBytes { p in Darwin.write(input.fileHandleForWriting.fileDescriptor,p.baseAddress!.advanced(by:offset),min(fragment,bytes.count-offset)) }
+            let n = bytes.withUnsafeBytes { p in SystemCall.write(input.fileHandleForWriting.fileDescriptor,p.baseAddress!.advanced(by:offset),min(fragment,bytes.count-offset)) }
             if n < 0 {
                 if errno == EINTR || errno == EAGAIN { try await Task.sleep(for:.milliseconds(2)); continue }
                 throw StdioFailure.system(errno)

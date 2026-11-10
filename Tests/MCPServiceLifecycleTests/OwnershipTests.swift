@@ -79,7 +79,7 @@ private func lifePeerEOF(_ descriptor: Int32, milliseconds: Int64 = 100) async t
     while true {
         try Task.checkCancellation()
         guard ContinuousClock.now < end else { throw StdioFailure.readDeadline }
-        let count = Darwin.recv(descriptor, &byte, 1, MSG_DONTWAIT), failure = errno
+        let count = SystemCall.recv(descriptor, &byte, 1, MSG_DONTWAIT), failure = errno
         if count == 0 { return }
         guard count < 0 else { throw StdioFailure.invalidOutputFrame }
         guard failure == EAGAIN || failure == EWOULDBLOCK || failure == EINTR else {
@@ -267,16 +267,16 @@ private func component(_ name: String, dependencies: [String] = [], log: LifeLog
     @Test func unixPeerEOFRejectsRetainedDescriptionAndObservesClosedPeer() async throws {
         var pair: [Int32] = [-1, -1]
         try #require(socketpair(AF_UNIX, testStreamSocketType, 0, &pair) == 0)
-        defer { _ = Darwin.close(pair[1]) }
+        defer { _ = SystemCall.close(pair[1]) }
         var held = fcntl(pair[0], F_DUPFD_CLOEXEC, 0)
         try #require(held >= 0)
-        defer { if held >= 0 { _ = Darwin.close(held) } }
-        try #require(Darwin.close(pair[0]) == 0)
+        defer { if held >= 0 { _ = SystemCall.close(held) } }
+        try #require(SystemCall.close(pair[0]) == 0)
         // A real leaked/open description cannot satisfy the EOF observation.
         await #expect(throws: StdioFailure.readDeadline) {
             try await lifePeerEOF(pair[1], milliseconds: 20)
         }
-        try #require(Darwin.close(held) == 0); held = -1
+        try #require(SystemCall.close(held) == 0); held = -1
         try await lifePeerEOF(pair[1])
     }
 
@@ -305,14 +305,14 @@ private func component(_ name: String, dependencies: [String] = [], log: LifeLog
             }
             #expect(transport.statistics.phase == .stopped)
             var byte: UInt8 = 0
-            let stillOpen = Darwin.recv(pair[1],&byte,1,MSG_DONTWAIT), openError = errno
+            let stillOpen = SystemCall.recv(pair[1],&byte,1,MSG_DONTWAIT), openError = errno
             #expect(stillOpen == -1 && (openError == EAGAIN || openError == EWOULDBLOCK))
-            #expect(Darwin.close(witness) == 0)
+            #expect(SystemCall.close(witness) == 0)
             // The I/O boundary closes descriptors, without socket shutdown. EOF
             // after dropping the witness proves both originals and all internal
             // duplicates were closed; a leaked description keeps this peer open.
             try await lifePeerEOF(pair[1])
-            _ = Darwin.close(pair[1])
+            _ = SystemCall.close(pair[1])
         }
         let owned = try ServerService(server:server,components:[component("final",log:LifeLog(),gate:LifeGate())])
         try await withThrowingTaskGroup(of:Void.self) { group in
