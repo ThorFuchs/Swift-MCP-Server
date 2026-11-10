@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 import Foundation
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import JSON
 import MCPProtocol
 
@@ -33,11 +37,13 @@ struct ContinuationClaims: Codable, Sendable {
 public struct RequestStateProtector: Sendable {
     public struct Key: Sendable {
         public let identifier: ScalarText
-        let material: SymmetricKey
+        // Raw 32-byte key; SymmetricKey is created per operation (swift-crypto's is not Sendable).
+        let materialBytes: Data
+        var material: SymmetricKey { SymmetricKey(data: materialBytes) }
         public init(identifier: ScalarText, material: Data) throws {
             guard !identifier.description.isEmpty, identifier.description.utf8.count <= 64,
                   identifier.description.utf8.allSatisfy({ (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 || $0 == 95 }), material.count == 32 else { throw CoreFailure.invalidPolicy }
-            self.identifier = identifier; self.material = SymmetricKey(data: material)
+            self.identifier = identifier; self.materialBytes = material
         }
     }
     private let keys: [Key], active: ScalarText

@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 import Foundation
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import Synchronization
 import Testing
 import JSON
@@ -524,7 +528,10 @@ extension EventCases {
     @Test func replaceableEventsCoalesceBehindAcknowledgementAndLateTokenCannotEmit() async throws {
         let entered = Mutex(false), release = Mutex(false)
         let recorder = try EventCollector()
-        let server = try await v05make(ServerCatalog(),events:EventPolicy(queuedEvents:2))
+        // Three slots: the parked acknowledgement, one coalesced list_changed and the
+        // teardown notifications/cancelled. With two, teardown races the sink release
+        // and overflows on slow hosts; ten publishes must still coalesce into one frame.
+        let server = try await v05make(ServerCatalog(),events:EventPolicy(queuedEvents:3))
         try await withThrowingTaskGroup(of:Void.self) { group in
             group.addTask {
                 try await server.dispatchEvents(v05request("subscriptions/listen",fields:#", "notifications":{"toolsListChanged":true}"#,id:70),principal:v05principal,origin:ScalarText("origin"),mode:.http) { bytes in

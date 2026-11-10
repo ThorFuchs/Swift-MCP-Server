@@ -4,7 +4,8 @@ Process: [ADR-0001](Docs/ADR/0001-lean-process.md). Branch → PR → CI → squ
 decisions that change public API, dependencies, platform floor, security or release scope as a
 short ADR in `Docs/ADR/`.
 
-Use Swift tools 6.4, language mode 6, macOS/SDK 27+. No package-owned unsafe compiler flags,
+Use Swift tools 6.4, language mode 6 and a macOS/SDK 27 development host. Deployment
+minimums are macOS 15, iOS 18 and Linux (ADR-0002); keep Linux building and tested. No package-owned unsafe compiler flags,
 retroactive Sendable escapes, silent validation skips, network schema fetches or detached unowned
 tasks. Any narrow unsafe interop boundary needs ownership/cancellation justification and native
 tests. Never bootstrap process-global logging/metrics, install signals or own host credentials

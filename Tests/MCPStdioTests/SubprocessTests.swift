@@ -1,5 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#elseif canImport(Musl)
+import Musl
+#endif
 import Foundation
 import Testing
 import JSON
@@ -30,7 +36,7 @@ private enum ChildFailure: Error { case exited(String) }
         for fd in [input.fileHandleForWriting.fileDescriptor,output.fileHandleForReading.fileDescriptor,error.fileHandleForReading.fileDescriptor] {
             guard fcntl(fd,F_SETFL,fcntl(fd,F_GETFL) | O_NONBLOCK) == 0 else { throw StdioFailure.system(errno) }
         }
-        _ = fcntl(input.fileHandleForWriting.fileDescriptor,F_SETNOSIGPIPE,1)
+        _ = setNoSigPipe(input.fileHandleForWriting.fileDescriptor)
     }
     func cleanup() {
         if process.isRunning { kill(process.processIdentifier,SIGKILL) }
@@ -41,7 +47,7 @@ private enum ChildFailure: Error { case exited(String) }
     func pull(_ fd: Int32, into bytes: inout Data) throws {
         var buffer = [UInt8](repeating:0,count:4096)
         while true {
-            let n = buffer.withUnsafeMutableBytes { Darwin.read(fd,$0.baseAddress,$0.count) }
+            let n = buffer.withUnsafeMutableBytes { SystemCall.read(fd,$0.baseAddress,$0.count) }
             if n < 0 { if errno == EAGAIN || errno == EINTR { return }; throw StdioFailure.system(errno) }
             if n == 0 { return }
             guard bytes.count + n <= 2_097_152 else { throw StdioFailure.outputOverflow }
@@ -57,7 +63,7 @@ private enum ChildFailure: Error { case exited(String) }
         var offset = 0
         while offset < bytes.count {
             guard ContinuousClock.now < deadline else { throw StdioFailure.writeDeadline }
-            let n = bytes.withUnsafeBytes { p in Darwin.write(input.fileHandleForWriting.fileDescriptor,p.baseAddress!.advanced(by:offset),min(fragment,bytes.count-offset)) }
+            let n = bytes.withUnsafeBytes { p in SystemCall.write(input.fileHandleForWriting.fileDescriptor,p.baseAddress!.advanced(by:offset),min(fragment,bytes.count-offset)) }
             if n < 0 {
                 if errno == EINTR || errno == EAGAIN { try await Task.sleep(for:.milliseconds(2)); continue }
                 throw StdioFailure.system(errno)
@@ -67,9 +73,10 @@ private enum ChildFailure: Error { case exited(String) }
         }
     }
     func waitDiagnostic(_ text: String, count: Int = 1) async throws {
-        // Startup prepares the unchanged39 native frozen plans (~17s debug on this
-        // host). This finite host launch bound is separate from transport I/O.
-        let end = ContinuousClock.now.advanced(by:.seconds(text == "READY" ? 60 : 10))
+        // Startup cold-prepares every frozen wire plan: about 30-40s in debug builds on
+        // a laptop, more on small CI runners or under load. This finite host launch
+        // bound is separate from transport I/O; transport deadlines stay unchanged.
+        let end = ContinuousClock.now.advanced(by:.seconds(text == "READY" ? 180 : 10))
         while true {
             try collect()
             if String(decoding:stderr,as:UTF8.self).components(separatedBy:text).count > count { return }

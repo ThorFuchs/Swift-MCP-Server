@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // D28 source tests only. NOT_COMPILED / NOT_RUN; native admission is separate.
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#elseif canImport(Musl)
+import Musl
+#endif
 import Foundation
 import Synchronization
 import SystemPackage
@@ -32,10 +38,10 @@ final class ConstructionObservations: Sendable {
     let outgoing: (readEnd: FileDescriptor, writeEnd: FileDescriptor)
     private var inputOriginal = true, outputOriginal = true, inputPeer = true, outputPeer = true
     init(nonblocking: Bool = true) throws {
-        incoming = try FileDescriptor.pipe(options:nonblocking ? [.nonBlocking,.closeOnExec] : [.closeOnExec])
-        do { outgoing = try FileDescriptor.pipe(options:nonblocking ? [.nonBlocking,.closeOnExec] : [.closeOnExec]) }
+        incoming = try testPipe(nonBlocking: nonblocking)
+        do { outgoing = try testPipe(nonBlocking: nonblocking) }
         catch { try? incoming.readEnd.close(); try? incoming.writeEnd.close(); throw error }
-        if nonblocking { #expect(fcntl(outgoing.writeEnd.rawValue,F_SETNOSIGPIPE,1) == 0) }
+        if nonblocking { #expect(setNoSigPipe(outgoing.writeEnd.rawValue) == 0) }
     }
     func make(_ observations: ConstructionObservations, owned: Bool = false) throws -> StdioTransport {
         let transport = try StdioTransport(input:incoming.readEnd,output:outgoing.writeEnd,
@@ -86,12 +92,12 @@ final class ConstructionObservations: Sendable {
         let p = try ConstructionPipes(nonblocking:false); defer { p.close() }
         let beforeInput = fcntl(p.incoming.readEnd.rawValue,F_GETFL)
         let beforeOutput = fcntl(p.outgoing.writeEnd.rawValue,F_GETFL)
-        let beforeSignal = fcntl(p.outgoing.writeEnd.rawValue,F_GETNOSIGPIPE)
+        let beforeSignal = getNoSigPipe(p.outgoing.writeEnd.rawValue)
         let events = ConstructionObservations(["flags.applied"])
         #expect(throws:ConstructionFault.injected("flags.applied")) { _ = try p.make(events,owned:true) }
         #expect(fcntl(p.incoming.readEnd.rawValue,F_GETFL) == beforeInput)
         #expect(fcntl(p.outgoing.writeEnd.rawValue,F_GETFL) == beforeOutput)
-        #expect(fcntl(p.outgoing.writeEnd.rawValue,F_GETNOSIGPIPE) == beforeSignal)
+        #expect(getNoSigPipe(p.outgoing.writeEnd.rawValue) == beforeSignal)
         #expect(events.count("closed.") == 6 && events.count("activated.") == 0)
     }
     @Test func neverRunDisposalHasOnlyPreparedResources() throws { // G01-S05

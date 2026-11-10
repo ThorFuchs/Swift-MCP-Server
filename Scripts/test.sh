@@ -4,7 +4,9 @@
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
-export SDKROOT="${SDKROOT:-$(xcrun --sdk macosx --show-sdk-path)}"
+if command -v xcrun >/dev/null 2>&1; then
+    export SDKROOT="${SDKROOT:-$(xcrun --sdk macosx --show-sdk-path)}"
+fi
 
 swift build --package-path Tools/StdioFixture --product StdioFixture
 swift build --package-path Examples/StdioServer --product ExampleStdioServer
