@@ -344,7 +344,12 @@ struct Dispatcher: Sendable {
                 let key = try await RequestKey.make(request.id, principal: principal, origin: origin, budget: budget)
                 try await ownership.insert(key, cancellation: cancellation); slot.key.withLock { $0 = key }
                 let extensions = try await snapshot.extensions.negotiate(request.capabilities, budget: budget)
-                if let supplemental, extensions[supplemental.namespace.description] == nil { throw CoreFailure.unknownMethod }
+                if let supplemental, extensions[supplemental.namespace.description] == nil {
+                    // Reserved official-extension methods (e.g. tasks/get) report the missing
+                    // capability (-32021); other supplemental routes stay method-not-found.
+                    if supplemental.reserved { throw try await ProtocolRejection.missingExtension(supplemental.namespace, wire: wire, budget: budget) }
+                    throw CoreFailure.unknownMethod
+                }
                 let metadata = request.params["_meta"]!.objectValue!
                 let token: RequestID? = try metadata["progressToken"].map { try RequestID($0) }
                 let level = metadata["io.modelcontextprotocol/logLevel"]?.stringValue.flatMap(ProtocolLogLevel.init(rawValue:))
