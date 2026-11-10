@@ -40,10 +40,23 @@ private func awaitWorker(_ io: FileDescriptorIO) async throws -> UInt {
         // A closed integer can already identify a different descriptor in a
         // parallel test. EPIPE on this still-owned pipe description proves its
         // reader closed; it also verifies the fixed worker actually joined.
+        // As in the lifecycle EOF observation tests, macOS can make the peer close
+        // visible slightly after the close syscall under heavy parallel load, so
+        // EPIPE is awaited under a separate 100 ms kernel observation bound. A
+        // successful write only means the close is not yet observable; any other
+        // error, or no EPIPE within the bound, fails.
         var byte: UInt8 = 1
-        #expect(throws:Errno.brokenPipe) {
-            _ = try withUnsafeBytes(of:&byte) { try p.writeEnd.write($0,retryOnInterrupt:false) }
+        let observation = ContinuousClock.now.advanced(by:.milliseconds(100))
+        var observedBrokenPipe = false
+        while !observedBrokenPipe && ContinuousClock.now < observation {
+            do {
+                _ = try withUnsafeBytes(of:&byte) { try p.writeEnd.write($0,retryOnInterrupt:false) }
+                try await Task.sleep(for:.milliseconds(1))
+            } catch Errno.brokenPipe {
+                observedBrokenPipe = true
+            }
         }
+        #expect(observedBrokenPipe)
     }
     @Test func interruptedPollRetriesWithoutLosingBytes() async throws {
         let p = try FileDescriptor.pipe(options:[.nonBlocking,.closeOnExec])

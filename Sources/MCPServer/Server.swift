@@ -56,13 +56,9 @@ public struct Server: Sendable {
     private let dispatcher: Dispatcher
     private let instrumentation: (any ServerRequestInstrumentation)?
     public let configuration: ServerConfiguration
-    public static func make(info: JSON, catalog: ServerCatalog, cursors: CursorProtector,
-        configuration: ServerConfiguration? = nil, continuations: RequestStateProtector? = nil, events: EventPolicy? = nil,
-        instrumentation: (any ServerRequestInstrumentation)? = nil, middleware: [RequestMiddleware] = []) async throws -> Self {
-        guard middleware.count <= 32 else { throw CoreFailure.limit }
-        let configuration = try configuration ?? ServerConfiguration()
-        let eventPolicy = try events ?? EventPolicy()
-        let budget = try configuration.preparation.budget()
+    /// Frozen wire definitions every server prepares at construction. Shared with tests so a
+    /// cold preparation of exactly this set is checked against the default preparation policy.
+    static let preparedDefinitions: Set<FrozenWireDefinition> = {
         let methods: Set<WireMethod> = [.discover, .listTools, .callTool, .listResources, .listResourceTemplates,
             .readResource, .listPrompts, .getPrompt, .complete]
         var definitions = Set(methods.map(\.definition)); definitions.formUnion(methods.compactMap(\.resultDefinition))
@@ -70,6 +66,16 @@ public struct Server: Sendable {
             .SubscriptionsListenRequest, .SubscriptionsListenResult, .SubscriptionsAcknowledgedNotification,
             .ProgressNotification, .LoggingMessageNotification, .ToolListChangedNotification, .ResourceListChangedNotification,
             .PromptListChangedNotification, .ResourceUpdatedNotification, .CancelledNotification, .Tool, .Resource, .ResourceTemplate, .Prompt, .ClientCapabilities, .Implementation, .RequestMetaObject, .ResultMetaObject, .Result, .NotificationMetaObject])
+        return definitions
+    }()
+    public static func make(info: JSON, catalog: ServerCatalog, cursors: CursorProtector,
+        configuration: ServerConfiguration? = nil, continuations: RequestStateProtector? = nil, events: EventPolicy? = nil,
+        instrumentation: (any ServerRequestInstrumentation)? = nil, middleware: [RequestMiddleware] = []) async throws -> Self {
+        guard middleware.count <= 32 else { throw CoreFailure.limit }
+        let configuration = try configuration ?? ServerConfiguration()
+        let eventPolicy = try events ?? EventPolicy()
+        let budget = try configuration.preparation.budget()
+        let definitions = Self.preparedDefinitions
         let wire = try await PreparedWire.prepare(definitions, budget: budget)
         guard try await wire.validate(info, as: .Implementation, budget: budget) else { throw CoreFailure.invalidInput }
         let snapshot = try await CatalogSnapshot.prepare(catalog, generation: 1, wire: wire, configuration: configuration, budget: budget)

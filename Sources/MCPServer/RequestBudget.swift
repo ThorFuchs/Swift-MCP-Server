@@ -48,6 +48,8 @@ public actor RequestBudget {
         available = workUnits; subsystemAvailable = subsystemLimits; reservationLimit = maximumReservations
     }
     public var remaining: UInt64 { failed ? 0 : available }
+    /// Remaining allowance of one subsystem (diagnostics and tests).
+    func remaining(_ subsystem: Subsystem) -> UInt64 { failed ? 0 : subsystemAvailable[subsystem] ?? 0 }
     public var snapshot: Snapshot {
         .init(remaining: remaining, settledWork: settled, activeReservations: reservations.count,
               isTerminal: failed, terminalTransitions: terminalTransitions)

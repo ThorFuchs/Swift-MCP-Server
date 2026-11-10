@@ -12,8 +12,11 @@ public enum CoreFailure: Error, Sendable, Equatable {
 /// replenishing work or changing the per-operation JSON limits.
 public struct ServerPreparationPolicy: Sendable {
     public let work, numeric, compilation, evaluation, regexCompilation, regexAggregate: UInt64
-    public init(work: UInt64 = 256_000_000, numeric: UInt64 = 8_000_000,
-        compilation: UInt64 = 128_000_000, evaluation: UInt64 = 32_000_000,
+    // Defaults keep about 2x headroom over a cold preparation of every frozen definition a
+    // server needs (measured: work 112M, compilation 107M, evaluation 31M units).
+    // ColdPreparationBudgetTests fails once a subsystem would use more than 75%.
+    public init(work: UInt64 = 512_000_000, numeric: UInt64 = 8_000_000,
+        compilation: UInt64 = 256_000_000, evaluation: UInt64 = 64_000_000,
         regexCompilation: UInt64 = 8_000_000, regexAggregate: UInt64 = 8_000_000) throws {
         guard work > 0, work <= 1_000_000_000,
               [numeric, compilation, evaluation, regexCompilation, regexAggregate].allSatisfy({ $0 > 0 && $0 <= work }) else { throw CoreFailure.invalidPolicy }
