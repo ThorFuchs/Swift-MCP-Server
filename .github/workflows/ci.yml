@@ -25,3 +25,7 @@ jobs:
           persist-credentials: false
       - run: swift --version
       - run: Scripts/test.sh
+      # The example resolves the core by URL (main), so it checks the example itself against
+      # the published core, not this checkout's core sources.
+      - name: Wikipedia Research Explorer tests
+        run: Examples/WikipediaResearchExplorer/Scripts/test.sh
