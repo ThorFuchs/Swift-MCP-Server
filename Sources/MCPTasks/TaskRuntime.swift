@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import Foundation
 import JSON
+import JSONSchema
 import MCPProtocol
 import MCPServer
 import Synchronization
@@ -85,6 +86,7 @@ public actor TaskRuntime {
     struct Job: Sendable {
         let id: String
         let input: JSONPresence<JSON>
+        let output: JSON?
         let work: TaskWork
         let context: TaskContext
         let cancellation: AsyncStream<Void>
@@ -147,9 +149,10 @@ public actor TaskRuntime {
     /// A tool whose calls become tasks for clients that declare the extension.
     public nonisolated func tool(definition: JSON, requiredScopes: Set<ScalarText> = [], mode: TaskMode = .required,
                                  work: @escaping TaskWork) -> ToolRegistration {
-        ToolRegistration(definition: definition, requiredScopes: requiredScopes) { input, context in
+        let output = definition.objectValue?["outputSchema"]
+        return ToolRegistration(definition: definition, requiredScopes: requiredScopes) { input, context in
             if context.extensions[TaskSchemas.identifier] != nil {
-                return try await self.create(input: input, request: context, work: work)
+                return try await self.create(input: input, request: context, output: output, work: work)
             }
             guard mode == .optional else { throw ExtensionCapabilityRequired(ScalarText(TaskSchemas.identifier)) }
             return try await work(input, TaskContext(inline: context))
@@ -158,7 +161,18 @@ public actor TaskRuntime {
 
     // MARK: Creation and execution
 
-    func create(input: JSONPresence<JSON>, request: RequestContext, work: @escaping TaskWork) async throws -> JSON {
+    /// Starts a task from inside any `tools/call` provider, for example on the final round
+    /// of a multi-round (MRTR) tool: return `.supplemental(result)` from that round. Answers
+    /// gathered in earlier rounds can be captured by `work`. Throws
+    /// `ExtensionCapabilityRequired` when the request did not negotiate the extension.
+    /// - Parameter outputSchema: the tool's `outputSchema`, if any, to validate the result.
+    public func start(_ input: JSONPresence<JSON>, context: RequestContext, outputSchema: JSON? = nil,
+                      work: @escaping TaskWork) async throws -> JSON {
+        guard context.extensions[TaskSchemas.identifier] != nil else { throw ExtensionCapabilityRequired(ScalarText(TaskSchemas.identifier)) }
+        return try await create(input: input, request: context, output: outputSchema, work: work)
+    }
+
+    func create(input: JSONPresence<JSON>, request: RequestContext, output: JSON? = nil, work: @escaping TaskWork) async throws -> JSON {
         guard let jobs else { throw TaskRuntimeError.notRunning }
         expire()
         let owner = Owner(request.principal)
@@ -171,18 +185,23 @@ public actor TaskRuntime {
         records[id] = Record(id: id, owner: owner, created: created, expires: created.addingTimeInterval(Self.seconds(configuration.timeToLive)),
                              updated: created, cancel: cancel)
         let context = TaskContext(id: id, runtime: self, budget: try RequestBudget(workUnits: configuration.taskWork), request: request)
-        if case .terminated = jobs.yield(Job(id: id, input: input, work: work, context: context, cancellation: cancellation)) {
+        if case .terminated = jobs.yield(Job(id: id, input: input, output: output, work: work, context: context, cancellation: cancellation)) {
             records[id] = nil
             throw TaskRuntimeError.notRunning
         }
         let task = try await taskObject(records[id]!, detailed: false, budget: request.budget)
-        return try await RuntimeJSON.object([.init("resultType", value: .string("task")), .init("task", value: task)], budget: request.budget)
+        // CreateTaskResult = Result & Task: flat task fields, never requestState or inputRequests.
+        return try await RuntimeJSON.overlay(task, members: [.init("resultType", value: .string("task"))], budget: request.budget)
     }
 
     private static func execute(_ job: Job) async {
         let outcome = await withTaskGroup(of: Outcome?.self) { group -> Outcome in
             group.addTask {
-                do { return .completed(try await job.work(job.input, job.context)) }
+                do {
+                    let result = try await job.work(job.input, job.context)
+                    guard let runtime = job.context.runtime else { return .completed(result) }
+                    return await runtime.checked(result, outputSchema: job.output, budget: job.context.budget)
+                }
                 catch let failure as TaskFailure { return .failed(failure) }
                 catch is CancellationError { return .cancelled }
                 catch { return .failed(TaskFailure(message: "Task execution failed")) }
@@ -199,6 +218,37 @@ public actor TaskRuntime {
             return outcome
         }
         await job.context.runtime?.settle(job.id, outcome)
+    }
+
+    // MARK: Result validation
+
+    private var callToolResultPlan: WireDefinitionPlan?
+
+    /// Task results get the same checks as synchronous tool results: a frozen
+    /// `CallToolResult` and, when the tool declares one, an `outputSchema`-valid
+    /// `structuredContent`. Anything else ends the task as `failed` (`-32603`).
+    func checked(_ result: JSON, outputSchema: JSON?, budget: RequestBudget) async -> Outcome {
+        let invalid = Outcome.failed(TaskFailure(message: "Task produced an invalid result"))
+        do {
+            guard result.objectValue?["resultType"]?.stringValue == "complete" else { return invalid }
+            let plan: WireDefinitionPlan
+            if let cached = callToolResultPlan { plan = cached }
+            else {
+                let data = try FrozenWireSchema.read(maximumBytes: FrozenWireSchema.byteCount)
+                let document = try await budget.performJSON { try FrozenWireSchema.parse(data, limits: $0) }
+                let root = try await budget.performJSON { try document.root(at: .CallToolResult, limits: $0) }
+                plan = try await budget.performJSON { try WireDefinitionPlan.compile(root, limits: $0) }
+                callToolResultPlan = plan
+            }
+            guard try await budget.performJSON({ try plan.validate(result, limits: $0) }) else { return invalid }
+            if let outputSchema {
+                guard let structured = result.objectValue?["structuredContent"] else { return invalid }
+                let compiled = try await budget.performJSON { try JSONSchemaCompiler(options: .init(limits: $0)).compileWithReport(outputSchema, registry: .empty) }
+                let outcome = try await budget.performJSON { try JSONSchemaValidator(options: .init(limits: $0, output: .flag)).validateWithReport(structured, against: compiled) }
+                guard outcome.isValid else { return invalid }
+            }
+            return .completed(result)
+        } catch { return invalid }
     }
 
     func settle(_ id: String, _ outcome: Outcome) {
