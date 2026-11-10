@@ -1,0 +1,23 @@
+Swift-MCP-Server
+Original scaffold and original implementation: Apache License, Version 2.0.
+
+Reference/Protocol contains public Model Context Protocol specification sources at
+c518f7a927cff918bce35d3522fcdb046d264d7c.
+Reference/Conformance contains selected public official conformance sources at
+f44482ba17df816d3176962a11cdf36aec9bda00.
+Full upstream transition/historical licensing notices are preserved in each Reference LICENSE.
+Reference documentation/code may carry Apache-2.0, CC-BY-4.0 or historical MIT obligations.
+See Contracts/reference-manifest.json and Docs/PROVENANCE.md for exact source provenance.
+
+No upstream SDK implementation is currently adapted into production sources. Record future adaptations
+here with actual file notices, repository paths and commits. Resolved dependency notices are
+audited before each release (see Docs/RELEASING.md).
+
+Sources/MCPProtocol/Resources/schema.json and LICENSE reproduce the immutable dated
+protocol schema and full transition notice. FrozenWireDependencies.swift is an
+original generated reference closure of that schema. No upstream SDK engine is ported.
+
+Tests/MCPServerTests/Resources/URITemplates preserves four public test corpora from
+uri-templates/uritemplate-test commit 4171dac22aa67fc710b3f6df308a50bd08552986.
+Its Apache-2.0 LICENSE and PROVENANCE.md are included. URITemplate.swift is original
+bounded RFC 6570 expansion code, tested against that independently authored corpus.

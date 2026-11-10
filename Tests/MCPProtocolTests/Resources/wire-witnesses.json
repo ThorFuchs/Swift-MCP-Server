@@ -1,0 +1,1951 @@
+[
+  {
+    "definition": "Annotations",
+    "positive": {},
+    "negative": null,
+    "negative_reason": "null is outside the declared root type/union"
+  },
+  {
+    "definition": "AudioContent",
+    "positive": {
+      "data": "value",
+      "mimeType": "value",
+      "type": "audio"
+    },
+    "negative": {
+      "data": "value",
+      "mimeType": "value"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "BaseMetadata",
+    "positive": {
+      "name": "value"
+    },
+    "negative": {},
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "BlobResourceContents",
+    "positive": {
+      "blob": "value",
+      "uri": "https://example.invalid/a"
+    },
+    "negative": {
+      "blob": "value"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "BooleanSchema",
+    "positive": {
+      "type": "boolean"
+    },
+    "negative": {},
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "CacheableResult",
+    "positive": {
+      "cacheScope": "private",
+      "resultType": "complete",
+      "ttlMs": 0
+    },
+    "negative": {
+      "cacheScope": "private",
+      "resultType": "complete"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "CallToolRequest",
+    "positive": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "method": "tools/call",
+      "params": {
+        "_meta": {
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+        },
+        "name": "value"
+      }
+    },
+    "negative": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "method": "tools/call"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "CallToolRequestParams",
+    "positive": {
+      "_meta": {
+        "io.modelcontextprotocol/clientCapabilities": {},
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+      },
+      "name": "value"
+    },
+    "negative": {
+      "_meta": {
+        "io.modelcontextprotocol/clientCapabilities": {},
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+      }
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "CallToolResult",
+    "positive": {
+      "content": [],
+      "resultType": "complete"
+    },
+    "negative": {
+      "content": []
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "CallToolResultResponse",
+    "positive": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "result": {
+        "resultType": "input_required",
+        "requestState": "state"
+      }
+    },
+    "negative": {
+      "id": "value",
+      "jsonrpc": "2.0"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "CancelledNotification",
+    "positive": {
+      "jsonrpc": "2.0",
+      "method": "notifications/cancelled",
+      "params": {
+        "requestId": "value"
+      }
+    },
+    "negative": {
+      "jsonrpc": "2.0",
+      "method": "notifications/cancelled"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "CancelledNotificationParams",
+    "positive": {
+      "requestId": "value"
+    },
+    "negative": {},
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ClientCapabilities",
+    "positive": {},
+    "negative": null,
+    "negative_reason": "null is outside the declared root type/union"
+  },
+  {
+    "definition": "ClientNotification",
+    "positive": {
+      "jsonrpc": "2.0",
+      "method": "notifications/cancelled",
+      "params": {
+        "requestId": "value"
+      }
+    },
+    "negative": {
+      "jsonrpc": "2.0",
+      "method": "notifications/cancelled"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ClientRequest",
+    "positive": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "method": "server/discover",
+      "params": {
+        "_meta": {
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+        }
+      }
+    },
+    "negative": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "method": "server/discover"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ClientResult",
+    "positive": {
+      "resultType": "complete"
+    },
+    "negative": {},
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "CompleteRequest",
+    "positive": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "method": "completion/complete",
+      "params": {
+        "_meta": {
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+        },
+        "argument": {
+          "name": "value",
+          "value": "value"
+        },
+        "ref": {
+          "name": "value",
+          "type": "ref/prompt"
+        }
+      }
+    },
+    "negative": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "method": "completion/complete"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "CompleteRequestParams",
+    "positive": {
+      "_meta": {
+        "io.modelcontextprotocol/clientCapabilities": {},
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+      },
+      "argument": {
+        "name": "value",
+        "value": "value"
+      },
+      "ref": {
+        "name": "value",
+        "type": "ref/prompt"
+      }
+    },
+    "negative": {
+      "_meta": {
+        "io.modelcontextprotocol/clientCapabilities": {},
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+      },
+      "argument": {
+        "name": "value",
+        "value": "value"
+      }
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "CompleteResult",
+    "positive": {
+      "completion": {
+        "values": []
+      },
+      "resultType": "complete"
+    },
+    "negative": {
+      "completion": {
+        "values": []
+      }
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "CompleteResultResponse",
+    "positive": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "result": {
+        "completion": {
+          "values": []
+        },
+        "resultType": "complete"
+      }
+    },
+    "negative": {
+      "id": "value",
+      "jsonrpc": "2.0"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ContentBlock",
+    "positive": {
+      "text": "value",
+      "type": "text"
+    },
+    "negative": {
+      "text": "value"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "CreateMessageRequest",
+    "positive": {
+      "method": "sampling/createMessage",
+      "params": {
+        "maxTokens": 0,
+        "messages": []
+      }
+    },
+    "negative": {
+      "method": "sampling/createMessage"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "CreateMessageRequestParams",
+    "positive": {
+      "maxTokens": 0,
+      "messages": []
+    },
+    "negative": {
+      "maxTokens": 0
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "CreateMessageResult",
+    "positive": {
+      "content": {
+        "text": "value",
+        "type": "text"
+      },
+      "model": "value",
+      "role": "assistant"
+    },
+    "negative": {
+      "content": {
+        "text": "value",
+        "type": "text"
+      },
+      "model": "value"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "Cursor",
+    "positive": "value",
+    "negative": true,
+    "negative_reason": "boolean is outside scalar string/enum"
+  },
+  {
+    "definition": "DiscoverRequest",
+    "positive": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "method": "server/discover",
+      "params": {
+        "_meta": {
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+        }
+      }
+    },
+    "negative": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "method": "server/discover"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "DiscoverResult",
+    "positive": {
+      "cacheScope": "private",
+      "capabilities": {},
+      "resultType": "complete",
+      "supportedVersions": [],
+      "ttlMs": 0
+    },
+    "negative": {
+      "cacheScope": "private",
+      "capabilities": {},
+      "resultType": "complete",
+      "supportedVersions": []
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "DiscoverResultResponse",
+    "positive": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "result": {
+        "cacheScope": "private",
+        "capabilities": {},
+        "resultType": "complete",
+        "supportedVersions": [],
+        "ttlMs": 0
+      }
+    },
+    "negative": {
+      "id": "value",
+      "jsonrpc": "2.0"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ElicitRequest",
+    "positive": {
+      "method": "elicitation/create",
+      "params": {
+        "message": "value",
+        "requestedSchema": {
+          "properties": {},
+          "type": "object"
+        }
+      }
+    },
+    "negative": {
+      "method": "elicitation/create"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ElicitRequestFormParams",
+    "positive": {
+      "message": "value",
+      "requestedSchema": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    "negative": {
+      "message": "value"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ElicitRequestParams",
+    "positive": {
+      "message": "value",
+      "requestedSchema": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    "negative": {
+      "message": "value"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ElicitRequestURLParams",
+    "positive": {
+      "message": "value",
+      "mode": "url",
+      "url": "https://example.invalid/a"
+    },
+    "negative": {
+      "message": "value",
+      "mode": "url"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ElicitResult",
+    "positive": {
+      "action": "accept"
+    },
+    "negative": {},
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "EmbeddedResource",
+    "positive": {
+      "resource": {
+        "text": "value",
+        "uri": "https://example.invalid/a"
+      },
+      "type": "resource"
+    },
+    "negative": {
+      "resource": {
+        "text": "value",
+        "uri": "https://example.invalid/a"
+      }
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "EmptyResult",
+    "positive": {
+      "resultType": "complete"
+    },
+    "negative": {},
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "EnumSchema",
+    "positive": {
+      "enum": [],
+      "type": "string"
+    },
+    "negative": {
+      "enum": []
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "Error",
+    "positive": {
+      "code": 0,
+      "message": "value"
+    },
+    "negative": {
+      "code": 0
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "GetPromptRequest",
+    "positive": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "method": "prompts/get",
+      "params": {
+        "_meta": {
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+        },
+        "name": "value"
+      }
+    },
+    "negative": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "method": "prompts/get"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "GetPromptRequestParams",
+    "positive": {
+      "_meta": {
+        "io.modelcontextprotocol/clientCapabilities": {},
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+      },
+      "name": "value"
+    },
+    "negative": {
+      "_meta": {
+        "io.modelcontextprotocol/clientCapabilities": {},
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+      }
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "GetPromptResult",
+    "positive": {
+      "messages": [],
+      "resultType": "complete"
+    },
+    "negative": {
+      "messages": []
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "GetPromptResultResponse",
+    "positive": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "result": {
+        "resultType": "input_required",
+        "requestState": "state"
+      }
+    },
+    "negative": {
+      "id": "value",
+      "jsonrpc": "2.0"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "HeaderMismatchError",
+    "positive": {
+      "error": {
+        "code": -32020,
+        "message": "value"
+      },
+      "jsonrpc": "2.0"
+    },
+    "negative": {
+      "error": {
+        "code": -32020,
+        "message": "value"
+      }
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "Icon",
+    "positive": {
+      "src": "https://example.invalid/a"
+    },
+    "negative": {},
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "Icons",
+    "positive": {},
+    "negative": null,
+    "negative_reason": "null is outside the declared root type/union"
+  },
+  {
+    "definition": "ImageContent",
+    "positive": {
+      "data": "value",
+      "mimeType": "value",
+      "type": "image"
+    },
+    "negative": {
+      "data": "value",
+      "mimeType": "value"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "Implementation",
+    "positive": {
+      "name": "value",
+      "version": "value"
+    },
+    "negative": {
+      "name": "value"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "InputRequest",
+    "positive": {
+      "method": "sampling/createMessage",
+      "params": {
+        "maxTokens": 0,
+        "messages": []
+      }
+    },
+    "negative": {
+      "method": "sampling/createMessage"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "InputRequests",
+    "positive": {},
+    "negative": null,
+    "negative_reason": "null is outside the declared root type/union"
+  },
+  {
+    "definition": "InputRequiredResult",
+    "positive": {
+      "resultType": "input_required",
+      "requestState": "state"
+    },
+    "negative": {
+      "resultType": "input_required"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "InputResponse",
+    "positive": {
+      "content": {
+        "text": "value",
+        "type": "text"
+      },
+      "model": "value",
+      "role": "assistant"
+    },
+    "negative": {
+      "content": {
+        "text": "value",
+        "type": "text"
+      },
+      "model": "value"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "InputResponseRequestParams",
+    "positive": {
+      "_meta": {
+        "io.modelcontextprotocol/clientCapabilities": {},
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+      }
+    },
+    "negative": {},
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "InputResponses",
+    "positive": {},
+    "negative": null,
+    "negative_reason": "null is outside the declared root type/union"
+  },
+  {
+    "definition": "InternalError",
+    "positive": {
+      "code": -32603,
+      "message": "value"
+    },
+    "negative": {
+      "code": -32603
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "InvalidParamsError",
+    "positive": {
+      "code": -32602,
+      "message": "value"
+    },
+    "negative": {
+      "code": -32602
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "InvalidRequestError",
+    "positive": {
+      "code": -32600,
+      "message": "value"
+    },
+    "negative": {
+      "code": -32600
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "JSONArray",
+    "positive": [],
+    "negative": null,
+    "negative_reason": "null is outside the declared root type/union"
+  },
+  {
+    "definition": "JSONObject",
+    "positive": {},
+    "negative": null,
+    "negative_reason": "null is outside the declared root type/union"
+  },
+  {
+    "definition": "JSONRPCErrorResponse",
+    "positive": {
+      "error": {
+        "code": 0,
+        "message": "value"
+      },
+      "jsonrpc": "2.0"
+    },
+    "negative": {
+      "error": {
+        "code": 0,
+        "message": "value"
+      }
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "JSONRPCMessage",
+    "positive": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "method": "value"
+    },
+    "negative": {
+      "id": "value",
+      "jsonrpc": "2.0"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "JSONRPCNotification",
+    "positive": {
+      "jsonrpc": "2.0",
+      "method": "value"
+    },
+    "negative": {
+      "jsonrpc": "2.0"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "JSONRPCRequest",
+    "positive": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "method": "value"
+    },
+    "negative": {
+      "id": "value",
+      "jsonrpc": "2.0"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "JSONRPCResponse",
+    "positive": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "result": {
+        "resultType": "complete"
+      }
+    },
+    "negative": {
+      "id": "value",
+      "jsonrpc": "2.0"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "JSONRPCResultResponse",
+    "positive": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "result": {
+        "resultType": "complete"
+      }
+    },
+    "negative": {
+      "id": "value",
+      "jsonrpc": "2.0"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "JSONValue",
+    "positive": {},
+    "negative": null,
+    "negative_reason": "null is outside the declared root type/union"
+  },
+  {
+    "definition": "LegacyTitledEnumSchema",
+    "positive": {
+      "enum": [],
+      "type": "string"
+    },
+    "negative": {
+      "enum": []
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ListPromptsRequest",
+    "positive": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "method": "prompts/list",
+      "params": {
+        "_meta": {
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+        }
+      }
+    },
+    "negative": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "method": "prompts/list"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ListPromptsResult",
+    "positive": {
+      "cacheScope": "private",
+      "prompts": [],
+      "resultType": "complete",
+      "ttlMs": 0
+    },
+    "negative": {
+      "cacheScope": "private",
+      "prompts": [],
+      "resultType": "complete"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ListPromptsResultResponse",
+    "positive": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "result": {
+        "cacheScope": "private",
+        "prompts": [],
+        "resultType": "complete",
+        "ttlMs": 0
+      }
+    },
+    "negative": {
+      "id": "value",
+      "jsonrpc": "2.0"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ListResourceTemplatesRequest",
+    "positive": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "method": "resources/templates/list",
+      "params": {
+        "_meta": {
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+        }
+      }
+    },
+    "negative": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "method": "resources/templates/list"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ListResourceTemplatesResult",
+    "positive": {
+      "cacheScope": "private",
+      "resourceTemplates": [],
+      "resultType": "complete",
+      "ttlMs": 0
+    },
+    "negative": {
+      "cacheScope": "private",
+      "resourceTemplates": [],
+      "resultType": "complete"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ListResourceTemplatesResultResponse",
+    "positive": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "result": {
+        "cacheScope": "private",
+        "resourceTemplates": [],
+        "resultType": "complete",
+        "ttlMs": 0
+      }
+    },
+    "negative": {
+      "id": "value",
+      "jsonrpc": "2.0"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ListResourcesRequest",
+    "positive": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "method": "resources/list",
+      "params": {
+        "_meta": {
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+        }
+      }
+    },
+    "negative": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "method": "resources/list"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ListResourcesResult",
+    "positive": {
+      "cacheScope": "private",
+      "resources": [],
+      "resultType": "complete",
+      "ttlMs": 0
+    },
+    "negative": {
+      "cacheScope": "private",
+      "resources": [],
+      "resultType": "complete"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ListResourcesResultResponse",
+    "positive": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "result": {
+        "cacheScope": "private",
+        "resources": [],
+        "resultType": "complete",
+        "ttlMs": 0
+      }
+    },
+    "negative": {
+      "id": "value",
+      "jsonrpc": "2.0"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ListRootsRequest",
+    "positive": {
+      "method": "roots/list"
+    },
+    "negative": {},
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ListRootsResult",
+    "positive": {
+      "roots": []
+    },
+    "negative": {},
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ListToolsRequest",
+    "positive": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "method": "tools/list",
+      "params": {
+        "_meta": {
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+        }
+      }
+    },
+    "negative": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "method": "tools/list"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ListToolsResult",
+    "positive": {
+      "cacheScope": "private",
+      "resultType": "complete",
+      "tools": [],
+      "ttlMs": 0
+    },
+    "negative": {
+      "cacheScope": "private",
+      "resultType": "complete",
+      "tools": []
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ListToolsResultResponse",
+    "positive": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "result": {
+        "cacheScope": "private",
+        "resultType": "complete",
+        "tools": [],
+        "ttlMs": 0
+      }
+    },
+    "negative": {
+      "id": "value",
+      "jsonrpc": "2.0"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "LoggingLevel",
+    "positive": "alert",
+    "negative": true,
+    "negative_reason": "boolean is outside scalar string/enum"
+  },
+  {
+    "definition": "LoggingMessageNotification",
+    "positive": {
+      "jsonrpc": "2.0",
+      "method": "notifications/message",
+      "params": {
+        "data": {},
+        "level": "alert"
+      }
+    },
+    "negative": {
+      "jsonrpc": "2.0",
+      "method": "notifications/message"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "LoggingMessageNotificationParams",
+    "positive": {
+      "data": {},
+      "level": "alert"
+    },
+    "negative": {
+      "data": {}
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "MetaObject",
+    "positive": {},
+    "negative": null,
+    "negative_reason": "null is outside the declared root type/union"
+  },
+  {
+    "definition": "MethodNotFoundError",
+    "positive": {
+      "code": -32601,
+      "message": "value"
+    },
+    "negative": {
+      "code": -32601
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "MissingRequiredClientCapabilityError",
+    "positive": {
+      "error": {
+        "code": -32021,
+        "message": "value",
+        "data": {
+          "requiredCapabilities": {}
+        }
+      },
+      "jsonrpc": "2.0"
+    },
+    "negative": {
+      "error": {
+        "code": -32021,
+        "message": "value",
+        "data": {
+          "requiredCapabilities": {}
+        }
+      }
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ModelHint",
+    "positive": {},
+    "negative": null,
+    "negative_reason": "null is outside the declared root type/union"
+  },
+  {
+    "definition": "ModelPreferences",
+    "positive": {},
+    "negative": null,
+    "negative_reason": "null is outside the declared root type/union"
+  },
+  {
+    "definition": "MultiSelectEnumSchema",
+    "positive": {
+      "items": {
+        "enum": [],
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "negative": {
+      "items": {
+        "enum": [],
+        "type": "string"
+      }
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "Notification",
+    "positive": {
+      "method": "value"
+    },
+    "negative": {},
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "NotificationMetaObject",
+    "positive": {},
+    "negative": null,
+    "negative_reason": "null is outside the declared root type/union"
+  },
+  {
+    "definition": "NotificationParams",
+    "positive": {},
+    "negative": null,
+    "negative_reason": "null is outside the declared root type/union"
+  },
+  {
+    "definition": "NumberSchema",
+    "positive": {
+      "type": "integer"
+    },
+    "negative": {},
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "PaginatedRequest",
+    "positive": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "method": "value",
+      "params": {
+        "_meta": {
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+        }
+      }
+    },
+    "negative": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "method": "value"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "PaginatedRequestParams",
+    "positive": {
+      "_meta": {
+        "io.modelcontextprotocol/clientCapabilities": {},
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+      }
+    },
+    "negative": {},
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "PaginatedResult",
+    "positive": {
+      "resultType": "complete"
+    },
+    "negative": {},
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ParseError",
+    "positive": {
+      "code": -32700,
+      "message": "value"
+    },
+    "negative": {
+      "code": -32700
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "PrimitiveSchemaDefinition",
+    "positive": {
+      "type": "string"
+    },
+    "negative": {},
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ProgressNotification",
+    "positive": {
+      "jsonrpc": "2.0",
+      "method": "notifications/progress",
+      "params": {
+        "progress": 0,
+        "progressToken": "value"
+      }
+    },
+    "negative": {
+      "jsonrpc": "2.0",
+      "method": "notifications/progress"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ProgressNotificationParams",
+    "positive": {
+      "progress": 0,
+      "progressToken": "value"
+    },
+    "negative": {
+      "progress": 0
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ProgressToken",
+    "positive": "value",
+    "negative": true,
+    "negative_reason": "boolean is outside scalar string/enum"
+  },
+  {
+    "definition": "Prompt",
+    "positive": {
+      "name": "value"
+    },
+    "negative": {},
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "PromptArgument",
+    "positive": {
+      "name": "value"
+    },
+    "negative": {},
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "PromptListChangedNotification",
+    "positive": {
+      "jsonrpc": "2.0",
+      "method": "notifications/prompts/list_changed"
+    },
+    "negative": {
+      "jsonrpc": "2.0"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "PromptMessage",
+    "positive": {
+      "content": {
+        "text": "value",
+        "type": "text"
+      },
+      "role": "assistant"
+    },
+    "negative": {
+      "content": {
+        "text": "value",
+        "type": "text"
+      }
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "PromptReference",
+    "positive": {
+      "name": "value",
+      "type": "ref/prompt"
+    },
+    "negative": {
+      "name": "value"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ReadResourceRequest",
+    "positive": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "method": "resources/read",
+      "params": {
+        "_meta": {
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+        },
+        "uri": "https://example.invalid/a"
+      }
+    },
+    "negative": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "method": "resources/read"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ReadResourceRequestParams",
+    "positive": {
+      "_meta": {
+        "io.modelcontextprotocol/clientCapabilities": {},
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+      },
+      "uri": "https://example.invalid/a"
+    },
+    "negative": {
+      "_meta": {
+        "io.modelcontextprotocol/clientCapabilities": {},
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+      }
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ReadResourceResult",
+    "positive": {
+      "cacheScope": "private",
+      "contents": [],
+      "resultType": "complete",
+      "ttlMs": 0
+    },
+    "negative": {
+      "cacheScope": "private",
+      "contents": [],
+      "resultType": "complete"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ReadResourceResultResponse",
+    "positive": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "result": {
+        "resultType": "input_required",
+        "requestState": "state"
+      }
+    },
+    "negative": {
+      "id": "value",
+      "jsonrpc": "2.0"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "Request",
+    "positive": {
+      "method": "value"
+    },
+    "negative": {},
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "RequestId",
+    "positive": "value",
+    "negative": true,
+    "negative_reason": "boolean is outside scalar string/enum"
+  },
+  {
+    "definition": "RequestMetaObject",
+    "positive": {
+      "io.modelcontextprotocol/clientCapabilities": {},
+      "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+    },
+    "negative": {
+      "io.modelcontextprotocol/clientCapabilities": {}
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "RequestParams",
+    "positive": {
+      "_meta": {
+        "io.modelcontextprotocol/clientCapabilities": {},
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+      }
+    },
+    "negative": {},
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "Resource",
+    "positive": {
+      "name": "value",
+      "uri": "https://example.invalid/a"
+    },
+    "negative": {
+      "name": "value"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ResourceContents",
+    "positive": {
+      "uri": "https://example.invalid/a"
+    },
+    "negative": {},
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ResourceLink",
+    "positive": {
+      "name": "value",
+      "type": "resource_link",
+      "uri": "https://example.invalid/a"
+    },
+    "negative": {
+      "name": "value",
+      "type": "resource_link"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ResourceListChangedNotification",
+    "positive": {
+      "jsonrpc": "2.0",
+      "method": "notifications/resources/list_changed"
+    },
+    "negative": {
+      "jsonrpc": "2.0"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ResourceRequestParams",
+    "positive": {
+      "_meta": {
+        "io.modelcontextprotocol/clientCapabilities": {},
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+      },
+      "uri": "https://example.invalid/a"
+    },
+    "negative": {
+      "_meta": {
+        "io.modelcontextprotocol/clientCapabilities": {},
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+      }
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ResourceTemplate",
+    "positive": {
+      "name": "value",
+      "uriTemplate": "value"
+    },
+    "negative": {
+      "name": "value"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ResourceTemplateReference",
+    "positive": {
+      "type": "ref/resource",
+      "uri": "value"
+    },
+    "negative": {
+      "type": "ref/resource"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ResourceUpdatedNotification",
+    "positive": {
+      "jsonrpc": "2.0",
+      "method": "notifications/resources/updated",
+      "params": {
+        "uri": "https://example.invalid/a"
+      }
+    },
+    "negative": {
+      "jsonrpc": "2.0",
+      "method": "notifications/resources/updated"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ResourceUpdatedNotificationParams",
+    "positive": {
+      "uri": "https://example.invalid/a"
+    },
+    "negative": {},
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "Result",
+    "positive": {
+      "resultType": "complete"
+    },
+    "negative": {},
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ResultMetaObject",
+    "positive": {},
+    "negative": null,
+    "negative_reason": "null is outside the declared root type/union"
+  },
+  {
+    "definition": "ResultType",
+    "positive": "value",
+    "negative": true,
+    "negative_reason": "boolean is outside scalar string/enum"
+  },
+  {
+    "definition": "Role",
+    "positive": "assistant",
+    "negative": true,
+    "negative_reason": "boolean is outside scalar string/enum"
+  },
+  {
+    "definition": "Root",
+    "positive": {
+      "uri": "file:///fixture"
+    },
+    "negative": {
+      "uri": "https://example.invalid/fixture"
+    },
+    "negative_reason": "dated roots boundary requires file URI"
+  },
+  {
+    "definition": "SamplingMessage",
+    "positive": {
+      "content": {
+        "text": "value",
+        "type": "text"
+      },
+      "role": "assistant"
+    },
+    "negative": {
+      "content": {
+        "text": "value",
+        "type": "text"
+      }
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "SamplingMessageContentBlock",
+    "positive": {
+      "text": "value",
+      "type": "text"
+    },
+    "negative": {
+      "text": "value"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ServerCapabilities",
+    "positive": {},
+    "negative": null,
+    "negative_reason": "null is outside the declared root type/union"
+  },
+  {
+    "definition": "ServerNotification",
+    "positive": {
+      "jsonrpc": "2.0",
+      "method": "notifications/cancelled",
+      "params": {
+        "requestId": "value"
+      }
+    },
+    "negative": {
+      "jsonrpc": "2.0",
+      "method": "notifications/cancelled"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ServerResult",
+    "positive": {
+      "resultType": "complete"
+    },
+    "negative": {},
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "SingleSelectEnumSchema",
+    "positive": {
+      "enum": [],
+      "type": "string"
+    },
+    "negative": {
+      "enum": []
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "StringSchema",
+    "positive": {
+      "type": "string"
+    },
+    "negative": {},
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "SubscriptionFilter",
+    "positive": {},
+    "negative": null,
+    "negative_reason": "null is outside the declared root type/union"
+  },
+  {
+    "definition": "SubscriptionsAcknowledgedNotification",
+    "positive": {
+      "jsonrpc": "2.0",
+      "method": "notifications/subscriptions/acknowledged",
+      "params": {
+        "notifications": {}
+      }
+    },
+    "negative": {
+      "jsonrpc": "2.0",
+      "method": "notifications/subscriptions/acknowledged"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "SubscriptionsAcknowledgedNotificationParams",
+    "positive": {
+      "notifications": {}
+    },
+    "negative": {},
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "SubscriptionsListenRequest",
+    "positive": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "method": "subscriptions/listen",
+      "params": {
+        "_meta": {
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+        },
+        "notifications": {}
+      }
+    },
+    "negative": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "method": "subscriptions/listen"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "SubscriptionsListenRequestParams",
+    "positive": {
+      "_meta": {
+        "io.modelcontextprotocol/clientCapabilities": {},
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+      },
+      "notifications": {}
+    },
+    "negative": {
+      "_meta": {
+        "io.modelcontextprotocol/clientCapabilities": {},
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+      }
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "SubscriptionsListenResult",
+    "positive": {
+      "_meta": {
+        "io.modelcontextprotocol/subscriptionId": "value"
+      },
+      "resultType": "complete"
+    },
+    "negative": {
+      "_meta": {
+        "io.modelcontextprotocol/subscriptionId": "value"
+      }
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "SubscriptionsListenResultMetaObject",
+    "positive": {
+      "io.modelcontextprotocol/subscriptionId": "value"
+    },
+    "negative": {},
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "SubscriptionsListenResultResponse",
+    "positive": {
+      "id": "value",
+      "jsonrpc": "2.0",
+      "result": {
+        "_meta": {
+          "io.modelcontextprotocol/subscriptionId": "value"
+        },
+        "resultType": "complete"
+      }
+    },
+    "negative": {
+      "id": "value",
+      "jsonrpc": "2.0"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "TextContent",
+    "positive": {
+      "text": "value",
+      "type": "text"
+    },
+    "negative": {
+      "text": "value"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "TextResourceContents",
+    "positive": {
+      "text": "value",
+      "uri": "https://example.invalid/a"
+    },
+    "negative": {
+      "text": "value"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "TitledMultiSelectEnumSchema",
+    "positive": {
+      "items": {
+        "anyOf": []
+      },
+      "type": "array"
+    },
+    "negative": {
+      "items": {
+        "anyOf": []
+      }
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "TitledSingleSelectEnumSchema",
+    "positive": {
+      "oneOf": [],
+      "type": "string"
+    },
+    "negative": {
+      "oneOf": []
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "Tool",
+    "positive": {
+      "inputSchema": {
+        "type": "object"
+      },
+      "name": "value"
+    },
+    "negative": {
+      "inputSchema": {
+        "type": "object"
+      }
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ToolAnnotations",
+    "positive": {},
+    "negative": null,
+    "negative_reason": "null is outside the declared root type/union"
+  },
+  {
+    "definition": "ToolChoice",
+    "positive": {},
+    "negative": null,
+    "negative_reason": "null is outside the declared root type/union"
+  },
+  {
+    "definition": "ToolListChangedNotification",
+    "positive": {
+      "jsonrpc": "2.0",
+      "method": "notifications/tools/list_changed"
+    },
+    "negative": {
+      "jsonrpc": "2.0"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ToolResultContent",
+    "positive": {
+      "content": [],
+      "toolUseId": "value",
+      "type": "tool_result"
+    },
+    "negative": {
+      "content": [],
+      "toolUseId": "value"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "ToolUseContent",
+    "positive": {
+      "id": "value",
+      "input": {},
+      "name": "value",
+      "type": "tool_use"
+    },
+    "negative": {
+      "id": "value",
+      "input": {},
+      "name": "value"
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "UnsupportedProtocolVersionError",
+    "positive": {
+      "error": {
+        "code": -32022,
+        "message": "value",
+        "data": {
+          "requested": "value",
+          "supported": []
+        }
+      },
+      "jsonrpc": "2.0"
+    },
+    "negative": {
+      "error": {
+        "code": -32022,
+        "message": "value",
+        "data": {
+          "requested": "value",
+          "supported": []
+        }
+      }
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "UntitledMultiSelectEnumSchema",
+    "positive": {
+      "items": {
+        "enum": [],
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "negative": {
+      "items": {
+        "enum": [],
+        "type": "string"
+      }
+    },
+    "negative_reason": "required member removed from witness"
+  },
+  {
+    "definition": "UntitledSingleSelectEnumSchema",
+    "positive": {
+      "enum": [],
+      "type": "string"
+    },
+    "negative": {
+      "enum": []
+    },
+    "negative_reason": "required member removed from witness"
+  }
+]
