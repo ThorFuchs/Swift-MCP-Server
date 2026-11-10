@@ -1,0 +1,21 @@
+{
+  "fixture_kind": "synthetic_normalized_example_not_upstream_payload",
+  "query": "Riverglass",
+  "candidates": [
+    {
+      "id": "fixture-observatory",
+      "project": "fixture-enwiki",
+      "page_id": "observatory",
+      "title": "Riverglass Observatory",
+      "description": "A fictional observatory"
+    },
+    {
+      "id": "fixture-expedition",
+      "project": "fixture-enwiki",
+      "page_id": "expedition",
+      "title": "Riverglass Expedition",
+      "description": "A fictional expedition"
+    }
+  ],
+  "truncated": false
+}
