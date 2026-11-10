@@ -3,7 +3,19 @@ import Foundation
 import JSON
 import MCPProtocol
 
-struct ProtocolRejection: Error, Sendable { let error: ModernProtocolError }
+struct ProtocolRejection: Error, Sendable {
+    let error: ModernProtocolError
+    /// `-32021` naming one required extension: `{"extensions": {identifier: {}}}`.
+    static func missingExtension(_ identifier: ScalarText, wire: PreparedWire, budget: RequestBudget) async throws -> Self {
+        let empty = try await RuntimeJSON.object([], budget: budget)
+        let extensions = try await RuntimeJSON.object([.init(identifier.description, value: empty)], budget: budget)
+        let required = try await RuntimeJSON.object([.init("extensions", value: extensions)], budget: budget)
+        guard let plan = wire.plans[.ClientCapabilities],
+              let projection = try await budget.performJSON({ try plan.project(required, as: MCPWire.ClientCapabilities.self, limits: $0) })
+        else { throw CoreFailure.invalidOutput }
+        return .init(error: .missingCapability(required: projection))
+    }
+}
 public typealias RequestMirrorValidator = @Sendable ([HeaderDeclaration], JSONPresence<JSON>, RequestBudget) async throws -> Void
 
 enum ProviderDispatch {
@@ -112,7 +124,8 @@ enum ProviderDispatch {
             if let plan = tool.rounds { result = try await InputCoordinator.execute(request, input: presence, context: context, plan: plan, protector: continuations, wire: wire, requestWork: requestWork, middleware: middleware) }
             else {
                 guard params["requestState"] == nil, params["inputResponses"] == nil else { throw CoreFailure.invalidInput }
-                result = try await MiddlewarePipeline.run(middleware, context: context) { try await tool.registration.handler(presence, context) }
+                do { result = try await MiddlewarePipeline.run(middleware, context: context) { try await tool.registration.handler(presence, context) } }
+                catch let required as ExtensionCapabilityRequired { throw try await ProtocolRejection.missingExtension(required.identifier, wire: wire, budget: budget) }
                 guard result.objectValue?["resultType"]?.stringValue == "complete" || snapshot.extensions.result(result, method: context.method, negotiated: context.extensions) != nil else { throw CoreFailure.invalidOutput }
             }
             try context.checkCancellation()
