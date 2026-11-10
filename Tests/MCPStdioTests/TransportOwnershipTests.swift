@@ -1,5 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#elseif canImport(Musl)
+import Musl
+#endif
 import Foundation
 import Testing
 import JSON
@@ -26,9 +32,9 @@ private func awaitWorker(_ io: FileDescriptorIO) async throws -> UInt {
 
 @Suite(.serialized) struct StdioOwnership {
     @Test func nonblockingReadCancellationWakesAndJoins() async throws {
-        let p = try FileDescriptor.pipe(options:[.nonBlocking,.closeOnExec])
+        let p = try testPipe()
         defer { try? p.writeEnd.close() }
-        #expect(fcntl(p.writeEnd.rawValue,F_SETNOSIGPIPE,1) == 0)
+        #expect(setNoSigPipe(p.writeEnd.rawValue) == 0)
         let io = try FileDescriptorIO(raw:p.readEnd.rawValue,writing:false)
         let task = Task { try await io.read(maximum:7,deadline:ContinuousClock.now.advanced(by:.seconds(30))) }
         _ = try await awaitWorker(io)
@@ -59,7 +65,7 @@ private func awaitWorker(_ io: FileDescriptorIO) async throws -> UInt {
         #expect(observedBrokenPipe)
     }
     @Test func interruptedPollRetriesWithoutLosingBytes() async throws {
-        let p = try FileDescriptor.pipe(options:[.nonBlocking,.closeOnExec])
+        let p = try testPipe()
         defer { try? p.writeEnd.close() }
         // Create the owned worker with the test host's explicitly unblocked
         // signal mask, restoring the creator's mask synchronously before await.
@@ -90,13 +96,13 @@ private func awaitWorker(_ io: FileDescriptorIO) async throws -> UInt {
     }
     @Test func borrowedFlagsUnchangedOwnedDescriptorsClosedAndSingleUse() async throws {
         let server = try await ownershipServer()
-        let incoming = try FileDescriptor.pipe(options:[.nonBlocking,.closeOnExec])
-        let outgoing = try FileDescriptor.pipe(options:[.nonBlocking,.closeOnExec])
+        let incoming = try testPipe()
+        let outgoing = try testPipe()
         defer {
             for fd in [incoming.readEnd,incoming.writeEnd,outgoing.readEnd,outgoing.writeEnd] { try? fd.close() }
         }
-        #expect(fcntl(outgoing.writeEnd.rawValue,F_SETNOSIGPIPE,1) == 0)
-        let noSigPipe = fcntl(outgoing.writeEnd.rawValue,F_GETNOSIGPIPE)
+        #expect(setNoSigPipe(outgoing.writeEnd.rawValue) == 0)
+        let noSigPipe = getNoSigPipe(outgoing.writeEnd.rawValue)
         let inputFlags = fcntl(incoming.readEnd.rawValue,F_GETFL), outputFlags = fcntl(outgoing.writeEnd.rawValue,F_GETFL)
         let transport = try StdioTransport(input:incoming.readEnd,output:outgoing.writeEnd)
         let task = Task { try await transport.run(server:server,principal:ownershipPrincipal,origin:ScalarText("borrowed")) }
@@ -106,7 +112,7 @@ private func awaitWorker(_ io: FileDescriptorIO) async throws -> UInt {
         #expect(transport.statistics.phase == .stopped)
         #expect(fcntl(incoming.readEnd.rawValue,F_GETFL) == inputFlags)
         #expect(fcntl(outgoing.writeEnd.rawValue,F_GETFL) == outputFlags)
-        #expect(fcntl(outgoing.writeEnd.rawValue,F_GETNOSIGPIPE) == noSigPipe)
+        #expect(getNoSigPipe(outgoing.writeEnd.rawValue) == noSigPipe)
         await #expect(throws:StdioFailure.alreadyRunning) { try await transport.run(server:server,principal:ownershipPrincipal,origin:ScalarText("borrowed")) }
         let ownedInput = try FileDescriptor.pipe(), ownedOutput = try FileDescriptor.pipe()
         defer { try? ownedInput.writeEnd.close(); try? ownedOutput.readEnd.close() }
@@ -123,7 +129,7 @@ private func awaitWorker(_ io: FileDescriptorIO) async throws -> UInt {
         let server = try await ownershipServer()
         let before = try openFDCount()
         for _ in 0..<32 {
-            let p = try FileDescriptor.pipe(options:[.nonBlocking,.closeOnExec]), q = try FileDescriptor.pipe(options:[.nonBlocking,.closeOnExec])
+            let p = try testPipe(), q = try testPipe()
             do {
                 let t = try StdioTransport(input:p.readEnd,output:q.writeEnd,inputOwnership:.owned,outputOwnership:.owned)
                 t.shutdown()
@@ -131,7 +137,7 @@ private func awaitWorker(_ io: FileDescriptorIO) async throws -> UInt {
             try p.writeEnd.close(); try q.readEnd.close()
         }
         #expect(try openFDCount() <= before + 1)
-        let p = try FileDescriptor.pipe(options:[.nonBlocking,.closeOnExec]), q = try FileDescriptor.pipe(options:[.nonBlocking,.closeOnExec])
+        let p = try testPipe(), q = try testPipe()
         defer { try? p.writeEnd.close(); try? q.readEnd.close() }
         let t = try StdioTransport(input:p.readEnd,output:q.writeEnd,inputOwnership:.owned,outputOwnership:.owned)
         let task = Task { try await t.run(server:server,principal:ownershipPrincipal,origin:ScalarText("cancel")) }
@@ -152,8 +158,11 @@ private func awaitWorker(_ io: FileDescriptorIO) async throws -> UInt {
         #expect(fcntl(p.readEnd.rawValue,F_GETFD) >= 0)
         #expect(fcntl(p.readEnd.rawValue,F_SETFL,O_NONBLOCK) == 0)
         #expect(fcntl(q.writeEnd.rawValue,F_SETFL,O_NONBLOCK) == 0)
+        #if canImport(Darwin)
+        // Only Darwin has the per-open-file SIGPIPE flag a borrowed output must carry.
         #expect(throws:StdioFailure.borrowedDescriptorMustSuppressSIGPIPE) { _ = try StdioTransport(input:p.readEnd,output:q.writeEnd) }
-        #expect(fcntl(q.writeEnd.rawValue,F_GETNOSIGPIPE) == 0)
+        #expect(getNoSigPipe(q.writeEnd.rawValue) == 0)
+        #endif
         var sockets: [Int32] = [-1,-1]
         #expect(socketpair(AF_UNIX,SOCK_STREAM,0,&sockets) == 0)
         defer { for fd in sockets { _ = Darwin.close(fd) } }

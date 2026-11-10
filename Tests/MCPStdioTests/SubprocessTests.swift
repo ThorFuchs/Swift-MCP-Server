@@ -1,5 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#elseif canImport(Musl)
+import Musl
+#endif
 import Foundation
 import Testing
 import JSON
@@ -30,7 +36,7 @@ private enum ChildFailure: Error { case exited(String) }
         for fd in [input.fileHandleForWriting.fileDescriptor,output.fileHandleForReading.fileDescriptor,error.fileHandleForReading.fileDescriptor] {
             guard fcntl(fd,F_SETFL,fcntl(fd,F_GETFL) | O_NONBLOCK) == 0 else { throw StdioFailure.system(errno) }
         }
-        _ = fcntl(input.fileHandleForWriting.fileDescriptor,F_SETNOSIGPIPE,1)
+        _ = setNoSigPipe(input.fileHandleForWriting.fileDescriptor)
     }
     func cleanup() {
         if process.isRunning { kill(process.processIdentifier,SIGKILL) }
@@ -67,9 +73,10 @@ private enum ChildFailure: Error { case exited(String) }
         }
     }
     func waitDiagnostic(_ text: String, count: Int = 1) async throws {
-        // Startup prepares the unchanged39 native frozen plans (~17s debug on this
-        // host). This finite host launch bound is separate from transport I/O.
-        let end = ContinuousClock.now.advanced(by:.seconds(text == "READY" ? 60 : 10))
+        // Startup cold-prepares every frozen wire plan: about 30-40s in debug builds on
+        // a laptop, more on small CI runners or under load. This finite host launch
+        // bound is separate from transport I/O; transport deadlines stay unchanged.
+        let end = ContinuousClock.now.advanced(by:.seconds(text == "READY" ? 180 : 10))
         while true {
             try collect()
             if String(decoding:stderr,as:UTF8.self).components(separatedBy:text).count > count { return }

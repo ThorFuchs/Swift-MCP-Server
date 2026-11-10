@@ -29,3 +29,17 @@ jobs:
       # the published core, not this checkout's core sources.
       - name: Wikipedia Research Explorer tests
         run: Examples/WikipediaResearchExplorer/Scripts/test.sh
+
+  linux:
+    # GitHub-hosted runner with the official Swift 6.4.2 Ubuntu 24.04 image.
+    runs-on: ubuntu-24.04
+    container:
+      # swift:6.4.2-noble multi-architecture index, pinned by digest.
+      image: swift@sha256:bca121f6eb59fd80340d1296887b2698ed8f3eb9eca7d80c181f8af769dc7ee0
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - run: swift --version
+      - run: Scripts/test.sh

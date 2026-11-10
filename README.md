@@ -8,8 +8,8 @@ A Swift server SDK for the [Model Context Protocol](https://modelcontextprotocol
 
 ## Requirements
 
-- macOS 27 or later
-- Swift 6.4 (Xcode 27), Swift 6 language mode
+- macOS 15 or later, iOS 18 or later, or Linux
+- Swift 6.4 (on macOS: Xcode 27), Swift 6 language mode
 
 ## Products
 

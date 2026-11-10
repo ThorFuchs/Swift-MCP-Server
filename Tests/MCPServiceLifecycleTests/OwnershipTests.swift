@@ -10,7 +10,13 @@ import MCPProtocol
 import MCPStdio
 import SystemPackage
 import JSON
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#elseif canImport(Musl)
+import Musl
+#endif
 
 private actor LifeLog {
     var entries: [String] = []

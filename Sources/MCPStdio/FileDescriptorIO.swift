@@ -1,5 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#elseif canImport(Musl)
+import Musl
+#endif
 import Foundation
 import Synchronization
 import SystemPackage
@@ -38,6 +44,7 @@ private final class IOThread: Sendable {
         let condition = NSCondition()
         let state = Mutex(State())
         func loop() {
+            blockSIGPIPEOnCurrentThread()
             while true {
                 condition.lock()
                 while state.withLock({ $0.pending == nil && !$0.stopped }) { condition.wait() }
@@ -128,7 +135,7 @@ final class FileDescriptorIO: Sendable {
     init(raw: Int32, writing: Bool, activateImmediately: Bool = true,
         probe: StdioLifecycleProbe = .none) throws {
         try probe.checkpoint(writing ? "prepare.output.wake" : "prepare.input.wake")
-        let wake = try FileDescriptor.pipe(options: [.nonBlocking, .closeOnExec])
+        let wake = try Self.makeWakePipe()
         descriptor = raw; wakeRead = wake.readEnd.rawValue; wakeWrite = wake.writeEnd.rawValue
         self.writing = writing; self.probe = probe
         queue = IOThread(name: writing ? "org.swift-mcp.stdio.write" : "org.swift-mcp.stdio.read")
@@ -155,7 +162,7 @@ final class FileDescriptorIO: Sendable {
     static func validate(_ raw: Int32, writing: Bool, ownership: DescriptorOwnership) throws {
         let flags = fcntl(raw, F_GETFL)
         guard flags >= 0 else { throw StdioFailure.invalidDescriptor }
-        guard writing ? flags & O_ACCMODE != O_RDONLY : flags & O_ACCMODE != O_WRONLY else { throw StdioFailure.invalidDescriptor }
+        guard writing ? flags & accessModeMask != O_RDONLY : flags & accessModeMask != O_WRONLY else { throw StdioFailure.invalidDescriptor }
         var info = stat()
         guard fstat(raw, &info) == 0 else { throw StdioFailure.system(errno) }
         guard info.st_mode & S_IFMT == S_IFIFO || info.st_mode & S_IFMT == S_IFSOCK else { throw StdioFailure.unsupportedDescriptor }
@@ -169,7 +176,9 @@ final class FileDescriptorIO: Sendable {
                 option.l_onoff == 0 || option.l_linger == 0 else { throw StdioFailure.unsupportedDescriptor }
         }
         if ownership == .borrowed, flags & O_NONBLOCK == 0 { throw StdioFailure.borrowedDescriptorMustBeNonblocking }
-        if writing, ownership == .borrowed, fcntl(raw,F_GETNOSIGPIPE) != 1 { throw StdioFailure.borrowedDescriptorMustSuppressSIGPIPE }
+        // Darwin: the shared open-file flag must suppress SIGPIPE. Linux has no such
+        // flag; the owned writer thread blocks SIGPIPE in its own signal mask instead.
+        if writing, ownership == .borrowed, !sigPipeSuppressionSatisfied(raw) { throw StdioFailure.borrowedDescriptorMustSuppressSIGPIPE }
     }
     static func duplicate(_ raw: Int32) throws -> Int32 {
         let copy = fcntl(raw, F_DUPFD_CLOEXEC, 0)
@@ -278,7 +287,7 @@ final class FileDescriptorIO: Sendable {
             // F_SETNOSIGPIPE/SO_NOSIGPIPE is configured by the exclusive owner,
             // never through a process signal handler. Its open-file/socket flag
             // is shared by duplicates, so borrowed outputs must already set it.
-            guard fcntl(descriptor,F_GETNOSIGPIPE) == 1 else { throw StdioFailure.invalidDescriptor }
+            guard sigPipeSuppressionSatisfied(descriptor) else { throw StdioFailure.invalidDescriptor }
             var offset = 0
             var deadline = ContinuousClock.now.advanced(by: .milliseconds(idleMilliseconds))
             do {
@@ -300,4 +309,49 @@ final class FileDescriptorIO: Sendable {
             }
         }
     }
+}
+
+// MARK: - Platform support
+
+/// Read/write access bits of `fcntl(F_GETFL)`. musl's `O_ACCMODE` macro is not
+/// imported into Swift; the access mode occupies the low two bits on every
+/// supported platform.
+let accessModeMask: Int32 = 0o3
+
+extension FileDescriptorIO {
+    /// Owned wake pipe: nonblocking and close-on-exec, cleaned up on any failure.
+    static func makeWakePipe() throws -> (readEnd: FileDescriptor, writeEnd: FileDescriptor) {
+        let pair = try FileDescriptor.pipe()
+        for raw in [pair.readEnd.rawValue, pair.writeEnd.rawValue] {
+            let flags = fcntl(raw, F_GETFL)
+            guard flags >= 0, fcntl(raw, F_SETFL, flags | O_NONBLOCK) == 0, fcntl(raw, F_SETFD, FD_CLOEXEC) == 0 else {
+                let code = errno; try? pair.readEnd.close(); try? pair.writeEnd.close()
+                throw StdioFailure.system(code)
+            }
+        }
+        return pair
+    }
+}
+
+/// Darwin uses the per-open-file `F_NOSIGPIPE` flag configured by the owner.
+/// Linux has no equivalent flag; there every write happens on an owned worker
+/// thread whose signal mask blocks SIGPIPE, so EPIPE is returned instead.
+func sigPipeSuppressionSatisfied(_ raw: Int32) -> Bool {
+    #if canImport(Darwin)
+    return fcntl(raw, F_GETNOSIGPIPE) == 1
+    #else
+    return true
+    #endif
+}
+
+/// Blocks SIGPIPE for the calling owned worker thread only. No process-wide
+/// disposition or handler is changed. A synchronous SIGPIPE raised by a write on
+/// this thread stays pending and blocked here; the write fails with EPIPE.
+func blockSIGPIPEOnCurrentThread() {
+    #if !canImport(Darwin)
+    var set = sigset_t()
+    sigemptyset(&set)
+    sigaddset(&set, SIGPIPE)
+    _ = pthread_sigmask(SIG_BLOCK, &set, nil)
+    #endif
 }

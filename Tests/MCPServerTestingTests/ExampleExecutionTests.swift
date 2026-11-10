@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 import Foundation
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#elseif canImport(Musl)
+import Musl
+#endif
 import Testing
 import JSON
 import MCPProtocol
@@ -17,7 +23,7 @@ private final class ExampleChild {
         process.standardInput = input; process.standardOutput = output; process.standardError = diagnostics
         try process.run()
         for fd in [output.fileHandleForReading.fileDescriptor, diagnostics.fileHandleForReading.fileDescriptor] { _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK) }
-        _ = fcntl(input.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
+        _ = setNoSigPipe(input.fileHandleForWriting.fileDescriptor)
     }
     func write(_ bytes: Data) throws { try input.fileHandleForWriting.write(contentsOf: bytes) }
     func eof() { try? input.fileHandleForWriting.close() }
@@ -34,7 +40,9 @@ private final class ExampleChild {
             }
         }
     }
-    func until(_ predicate: () -> Bool, seconds: Int = 60) async throws {
+    // Generous upper bound: example startup cold-prepares every frozen wire plan
+    // (about 30-40s in debug builds, more on small CI runners). Only failure latency grows.
+    func until(_ predicate: () -> Bool, seconds: Int = 180) async throws {
         let deadline = ContinuousClock.now.advanced(by: .seconds(seconds))
         while true { try pump(); if predicate() { return }; guard ContinuousClock.now < deadline else { throw TestFailure.timeout }; try await Task.sleep(for: .milliseconds(5)) }
     }

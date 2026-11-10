@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 import Foundation
 import Synchronization
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#elseif canImport(Musl)
+import Musl
+#endif
 import SystemPackage
 import MCPProtocol
 import MCPServer
@@ -168,7 +174,7 @@ public final class StdioTransport: Sendable {
         try FileDescriptorIO.validate(output.rawValue,writing:true,ownership:outputOwnership)
         try lifecycle.checkpoint("validated")
         let originalInputFlags = fcntl(input.rawValue,F_GETFL), originalOutputFlags = fcntl(output.rawValue,F_GETFL)
-        let originalNoSigPipe = fcntl(output.rawValue,F_GETNOSIGPIPE)
+        let originalNoSigPipe = noSigPipeFlag(output.rawValue)
         guard originalInputFlags >= 0, originalOutputFlags >= 0, originalNoSigPipe >= 0 else { throw StdioFailure.system(errno) }
         let readCopy = try FileDescriptorIO.duplicate(input.rawValue)
         let readIO: FileDescriptorIO
@@ -194,7 +200,7 @@ public final class StdioTransport: Sendable {
             if outputOwnership == .owned {
                 outputFlagsTouched = true; try FileDescriptorIO.nonblocking(output.rawValue)
                 noSigPipeTouched = true
-                guard fcntl(output.rawValue,F_SETNOSIGPIPE,1) == 0 else { throw StdioFailure.system(errno) }
+                guard setNoSigPipeFlag(output.rawValue,1) == 0 else { throw StdioFailure.system(errno) }
             }
             try lifecycle.checkpoint("flags.applied")
             preparedWriter = try StdioOutput(io:writeIO,policy:policy)
@@ -203,7 +209,7 @@ public final class StdioTransport: Sendable {
             var cleanup: [StdioLifecycleIssue] = []
             if inputFlagsTouched, fcntl(input.rawValue,F_SETFL,originalInputFlags) != 0 { cleanup.append(.init(stage:"restore.input.flags",code:errno)) }
             if outputFlagsTouched, fcntl(output.rawValue,F_SETFL,originalOutputFlags) != 0 { cleanup.append(.init(stage:"restore.output.flags",code:errno)) }
-            if noSigPipeTouched, fcntl(output.rawValue,F_SETNOSIGPIPE,originalNoSigPipe) != 0 { cleanup.append(.init(stage:"restore.output.nosigpipe",code:errno)) }
+            if noSigPipeTouched, setNoSigPipeFlag(output.rawValue,originalNoSigPipe) != 0 { cleanup.append(.init(stage:"restore.output.nosigpipe",code:errno)) }
             readIO.stop(); writeIO.stop()
             cleanup += readIO.cleanupIssues; cleanup += writeIO.cleanupIssues
             throw Self.failure(error,cleanup:cleanup)
@@ -359,4 +365,21 @@ public final class StdioTransport: Sendable {
         state.withLock { $0.inputBytes = peaks.0; $0.inputFrames = peaks.1 }
         if !cleanup.isEmpty { throw StdioLifecycleFailure(operation:nil,cleanup:cleanup) }
     }
+}
+
+// Darwin's per-open-file SIGPIPE suppression. Linux has no such flag (see
+// blockSIGPIPEOnCurrentThread); reads report 0 and writes succeed without effect.
+private func noSigPipeFlag(_ raw: Int32) -> Int32 {
+    #if canImport(Darwin)
+    return fcntl(raw, F_GETNOSIGPIPE)
+    #else
+    return 0
+    #endif
+}
+private func setNoSigPipeFlag(_ raw: Int32, _ value: Int32) -> Int32 {
+    #if canImport(Darwin)
+    return fcntl(raw, F_SETNOSIGPIPE, value)
+    #else
+    return 0
+    #endif
 }
