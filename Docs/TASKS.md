@@ -50,6 +50,11 @@ try await withThrowingTaskGroup(of: Void.self) { group in
 ## Not yet implemented
 
 - `notifications/tasks` over `subscriptions/listen` (optional in the specification).
-- `Mcp-Name` validation for `tasks/*` in Swift-MCP-Server-HTTP.
 - Pluggable durable stores; the runtime keeps tasks in memory.
-- Official conformance fixture tools for the 10 Tasks scenarios.
+
+## Conformance
+
+Swift-MCP-Server-HTTP validates `Mcp-Name` for `tasks/*` (it must equal `params.taskId`)
+and its conformance fixture registers the tools of the official Tasks scenarios. Against
+`@modelcontextprotocol/conformance` 0.2.0-alpha.12 all 10 Tasks scenarios pass in
+addition to the 37 required ones.
