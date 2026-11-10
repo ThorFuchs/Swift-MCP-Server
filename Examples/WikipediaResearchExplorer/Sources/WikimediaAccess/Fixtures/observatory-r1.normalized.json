@@ -1,0 +1,71 @@
+{
+  "fixture_kind": "synthetic_normalized_example_not_upstream_payload",
+  "format_version": "wre-fixture-1",
+  "project": "fixture-enwiki",
+  "page_id": "observatory",
+  "revision_id": "r1",
+  "title": "Riverglass Observatory",
+  "source_url": "fixture://riverglass/observatory/r1",
+  "normalizer_version": "fixture-1",
+  "license": "Apache-2.0 (synthetic example data)",
+  "parts": [
+    {
+      "id": "p1",
+      "heading": "Overview",
+      "text": "Riverglass Observatory is a fictional teaching dataset.",
+      "citations": []
+    },
+    {
+      "id": "p2",
+      "heading": "Telescope",
+      "text": "The fictional telescope uses a 2-metre mirror.",
+      "citations": [
+        "ref-1"
+      ],
+      "parts": [
+        {
+          "id": "p2-1",
+          "heading": "Calibration",
+          "text": "Calibration includes a Unicode target: α — π.",
+          "citations": [
+            "ref-unresolved"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "p3",
+      "heading": "Expeditions",
+      "text": "The fictional expedition compared two readings.",
+      "citations": []
+    }
+  ],
+  "references": [
+    {
+      "id": "ref-1",
+      "title": "Fictional Riverglass Instrument Notes",
+      "url": "fixture://riverglass/references/instrument-notes",
+      "synthetic": true
+    }
+  ],
+  "tables": [
+    {
+      "id": "table-1",
+      "caption": "Synthetic mirror comparison",
+      "columns": [
+        "Instrument",
+        "Diameter (m)"
+      ],
+      "rows": [
+        [
+          "Riverglass",
+          2
+        ],
+        [
+          "Hillglass",
+          1
+        ]
+      ]
+    }
+  ]
+}

@@ -1,0 +1,322 @@
+{
+  "name": "read_article_section",
+  "description": "Read bounded plain text from an exact cached Wikipedia revision. Tables, media and mathematical rendering are omitted. Cache expiry requires an explicit new outline.",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "snapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "provider": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "project": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "pageID": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "revisionID": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "normalizerVersion": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "provider",
+          "project",
+          "pageID",
+          "revisionID",
+          "normalizerVersion"
+        ]
+      },
+      "part": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "snapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "provider": {
+                "type": "string",
+                "maxLength": 128
+              },
+              "project": {
+                "type": "string",
+                "maxLength": 128
+              },
+              "pageID": {
+                "type": "string",
+                "maxLength": 128
+              },
+              "revisionID": {
+                "type": "string",
+                "maxLength": 128
+              },
+              "normalizerVersion": {
+                "type": "string",
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "provider",
+              "project",
+              "pageID",
+              "revisionID",
+              "normalizerVersion"
+            ]
+          },
+          "partID": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "snapshot",
+          "partID"
+        ]
+      },
+      "maxTextBytes": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 32768
+      }
+    },
+    "required": [
+      "snapshot",
+      "part"
+    ]
+  },
+  "outputSchema": {
+    "oneOf": [
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "const": "ok"
+          },
+          "value": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "snapshot": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "provider": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "project": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "pageID": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "revisionID": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "normalizerVersion": {
+                    "type": "string",
+                    "maxLength": 128
+                  }
+                },
+                "required": [
+                  "provider",
+                  "project",
+                  "pageID",
+                  "revisionID",
+                  "normalizerVersion"
+                ]
+              },
+              "provenance": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "identity": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "provider": {
+                        "type": "string",
+                        "maxLength": 128
+                      },
+                      "project": {
+                        "type": "string",
+                        "maxLength": 128
+                      },
+                      "pageID": {
+                        "type": "string",
+                        "maxLength": 128
+                      },
+                      "revisionID": {
+                        "type": "string",
+                        "maxLength": 128
+                      },
+                      "normalizerVersion": {
+                        "type": "string",
+                        "maxLength": 128
+                      }
+                    },
+                    "required": [
+                      "provider",
+                      "project",
+                      "pageID",
+                      "revisionID",
+                      "normalizerVersion"
+                    ]
+                  },
+                  "title": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "sourceURL": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "retrievedAt": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "modifiedAt": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "language": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "license": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "synthetic": {
+                    "const": false
+                  }
+                },
+                "required": [
+                  "identity",
+                  "title",
+                  "sourceURL",
+                  "retrievedAt",
+                  "license",
+                  "synthetic"
+                ]
+              },
+              "selectedPartID": {
+                "type": "string",
+                "maxLength": 128
+              },
+              "includedPartIDs": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 128
+                },
+                "maxItems": 128
+              },
+              "text": {
+                "type": "string",
+                "maxLength": 32768
+              },
+              "truncated": {
+                "type": "boolean"
+              },
+              "continuationSupported": {
+                "const": false
+              },
+              "textAvailable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "snapshot",
+              "provenance",
+              "selectedPartID",
+              "includedPartIDs",
+              "text",
+              "truncated",
+              "continuationSupported",
+              "textAvailable"
+            ]
+          }
+        },
+        "required": [
+          "status",
+          "value"
+        ]
+      },
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "const": "error"
+          },
+          "problem": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_arguments",
+                  "project_not_allowed",
+                  "unknown_candidate",
+                  "absent_page",
+                  "absent_snapshot",
+                  "absent_section",
+                  "revision_mismatch",
+                  "ambiguous_title",
+                  "missing_references",
+                  "unsupported_variant",
+                  "budget_exceeded",
+                  "upstream_unavailable",
+                  "upstream_rate_limited",
+                  "upstream_timed_out",
+                  "invalid_fixture"
+                ]
+              },
+              "message": {
+                "type": "string",
+                "maxLength": 512
+              },
+              "recovery": {
+                "type": "string",
+                "maxLength": 1024
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "recovery"
+            ]
+          }
+        },
+        "required": [
+          "status",
+          "problem"
+        ]
+      }
+    ]
+  },
+  "annotations": {
+    "title": "Read Article Section",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": true
+  }
+}

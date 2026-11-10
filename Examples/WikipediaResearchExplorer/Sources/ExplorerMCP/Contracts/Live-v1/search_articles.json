@@ -1,0 +1,161 @@
+{
+  "name": "search_articles",
+  "description": "Search English Wikipedia. At the requested cap, refine your query; total matches are unknown. Use an opaque returned candidate ID.",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "query": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      },
+      "project": {
+        "const": "enwiki"
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 20
+      }
+    },
+    "required": [
+      "query",
+      "project"
+    ]
+  },
+  "outputSchema": {
+    "oneOf": [
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "const": "ok"
+          },
+          "value": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "candidates": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "maxLength": 128
+                    },
+                    "project": {
+                      "type": "string",
+                      "maxLength": 128
+                    },
+                    "pageID": {
+                      "type": "string",
+                      "maxLength": 128
+                    },
+                    "title": {
+                      "type": "string",
+                      "maxLength": 512
+                    },
+                    "description": {
+                      "type": "string",
+                      "maxLength": 1024
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "project",
+                    "pageID",
+                    "title"
+                  ]
+                },
+                "maxItems": 20
+              },
+              "truncated": {
+                "type": "boolean"
+              },
+              "provider": {
+                "type": "string",
+                "maxLength": 128
+              },
+              "query": {
+                "type": "string",
+                "maxLength": 256
+              }
+            },
+            "required": [
+              "candidates",
+              "truncated",
+              "provider",
+              "query"
+            ]
+          }
+        },
+        "required": [
+          "status",
+          "value"
+        ]
+      },
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "const": "error"
+          },
+          "problem": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_arguments",
+                  "project_not_allowed",
+                  "unknown_candidate",
+                  "absent_page",
+                  "absent_snapshot",
+                  "absent_section",
+                  "revision_mismatch",
+                  "ambiguous_title",
+                  "missing_references",
+                  "unsupported_variant",
+                  "budget_exceeded",
+                  "upstream_unavailable",
+                  "upstream_rate_limited",
+                  "upstream_timed_out",
+                  "invalid_fixture"
+                ]
+              },
+              "message": {
+                "type": "string",
+                "maxLength": 512
+              },
+              "recovery": {
+                "type": "string",
+                "maxLength": 1024
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "recovery"
+            ]
+          }
+        },
+        "required": [
+          "status",
+          "problem"
+        ]
+      }
+    ]
+  },
+  "annotations": {
+    "title": "Search Articles",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": true
+  }
+}
