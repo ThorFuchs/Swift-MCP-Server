@@ -18,7 +18,7 @@ private final class ExampleChild {
     var out = Data(), err = Data()
     init(_ binary: String, arguments: [String] = [], environment: [String:String] = [:]) throws {
         process.executableURL = URL(fileURLWithPath: binary); process.arguments = arguments
-        process.currentDirectoryURL = URL(fileURLWithPath: "/private/tmp")
+        process.currentDirectoryURL = FileManager.default.temporaryDirectory
         process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
         process.standardInput = input; process.standardOutput = output; process.standardError = diagnostics
         try process.run()
