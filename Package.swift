@@ -19,7 +19,6 @@ let package = Package(
     ],
     dependencies: [
         // Swift-JSON 1.9.0 (macOS 15 / iOS 18 / Linux, like this package).
-        // Switch to `from: "1.8.1"` once that release is tagged.
         .package(url: "https://github.com/ThorFuchs/Swift-JSON.git", from: "1.9.0"),
         // CryptoKit on Apple platforms; the API-compatible swift-crypto elsewhere.
         .package(url: "https://github.com/apple/swift-crypto.git", "3.0.0"..<"5.0.0"),
