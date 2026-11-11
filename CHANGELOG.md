@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- New `MCPClient` product: client for 2026-07-28 with MRTR, listen streams, schema
+  validation and `x-mcp-header` mirroring (ADR-0005, Docs/CLIENT.md). `MCPServerTesting`
+  gains `LoopbackTransport`.
+
 - New `MCPTasks` product: server-side runtime for the Tasks extension
   (`io.modelcontextprotocol/tasks`, 2026-07-28) with task-backed tools, `tasks/get`,
   `tasks/update` and `tasks/cancel` (ADR-0003, Docs/TASKS.md).

@@ -139,7 +139,7 @@ public actor Client {
                          onLog: (@Sendable (LogMessage) async -> Void)? = nil,
                          onEvent: (@Sendable (ListenEvent) async throws -> Void)? = nil) async throws -> JSON {
         var continuation: [JSONMember] = []
-        var round = 0
+        var round = 0, versionRetried = false
         while true {
             try Task.checkCancellation()
             let id = identifier()
@@ -163,8 +163,23 @@ public actor Client {
                                         onProgress: onProgress, onLog: onLog, onEvent: onEvent)
             }
             guard let response = final.withLock({ $0 })?.objectValue else { throw ClientError.noResponse }
-            if let error = response["error"] { throw Self.serverError(error) }
-            guard let result = response["result"], let object = result.objectValue else { throw ClientError.invalidResponse("response without result") }
+            if let error = response["error"] {
+                let failure = Self.serverError(error)
+                // UnsupportedProtocolVersionError: retry once when the server says it supports
+                // our only version after all; otherwise report what it supports.
+                if case .server(-32022, _, let data) = failure {
+                    let supported = data?.objectValue?["supported"]?.arrayValue?.compactMap(\.stringValue) ?? []
+                    if supported.contains(Self.protocolVersion), !versionRetried { versionRetried = true; continue }
+                    throw ClientError.unsupportedProtocol(supported: supported)
+                }
+                throw failure
+            }
+            guard var result = response["result"], let original = result.objectValue else { throw ClientError.invalidResponse("response without result") }
+            // A result without resultType is complete (servers of earlier revisions omit it).
+            if original["resultType"] == nil {
+                result = .object(try JSONObject(members: Array(original) + [JSONMember("resultType", value: .string("complete"))]))
+            }
+            let object = result.objectValue!
             switch object["resultType"]?.stringValue ?? "complete" {
             case "input_required":
                 guard try await validator.validate(result, as: .InputRequiredResult) else { throw ClientError.invalidResponse("InputRequiredResult") }

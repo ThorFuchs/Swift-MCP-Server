@@ -170,3 +170,40 @@ private struct InputRequiringTransport: ClientTransport {
         await #expect(throws: (any Error).self) { _ = try await call.value }
     }
 }
+
+/// Replays canned responses in order, each with the request's own id.
+private final class ScriptedTransport: ClientTransport, Sendable {
+    private let replies: [String]
+    private let calls = Mutex(0)
+    init(_ replies: [String]) { self.replies = replies }
+    var requests: Int { calls.withLock { $0 } }
+    func exchange(_ request: OutgoingRequest, receive: @escaping @Sendable (Data) async throws -> Void) async throws {
+        let index = calls.withLock { value -> Int in defer { value += 1 }; return value }
+        let id = try #require(try json(String(decoding: request.body, as: UTF8.self)).objectValue?["id"])
+        let reply = try #require(try json(replies[min(index, replies.count - 1)]).objectValue)
+        let members = Array(reply).map { $0.key.string == "id" ? JSONMember("id", value: id) : $0 }
+        try await receive(try WireCodec.write(.object(try JSONObject(members: members)), limits: .balanced).result)
+    }
+}
+
+@Suite struct ClientCompatibilityCases {
+    @Test func resultsWithoutResultTypeAreComplete() async throws {
+        let transport = ScriptedTransport([#"{"jsonrpc":"2.0","id":0,"result":{"content":[{"type":"text","text":"legacy"}]}}"#])
+        let result = try await Client(transport: transport).callTool("any")
+        #expect(result.text == "legacy" && result.resultType == "complete" && transport.requests == 1)
+    }
+
+    @Test func unsupportedVersionIsRetriedOnceOnlyWhenOurVersionIsListed() async throws {
+        let rejected = #"{"jsonrpc":"2.0","id":0,"error":{"code":-32022,"message":"Unsupported protocol version","data":{"supported":["2026-07-28"]}}}"#
+        let tools = #"{"jsonrpc":"2.0","id":0,"result":{"resultType":"complete","tools":[],"ttlMs":0,"cacheScope":"private"}}"#
+        let retried = ScriptedTransport([rejected, tools])
+        #expect(try await Client(transport: retried).listTools().items.isEmpty && retried.requests == 2)
+        let foreign = ScriptedTransport([#"{"jsonrpc":"2.0","id":0,"error":{"code":-32022,"message":"no","data":{"supported":["2099-01-01"]}}}"#])
+        do { _ = try await Client(transport: foreign).listTools(); Issue.record("expected unsupportedProtocol") }
+        catch ClientError.unsupportedProtocol(let supported) { #expect(supported == ["2099-01-01"] && foreign.requests == 1) }
+        // A server that keeps rejecting is not retried forever.
+        let stubborn = ScriptedTransport([rejected])
+        await #expect(throws: ClientError.self) { _ = try await Client(transport: stubborn).listTools() }
+        #expect(stubborn.requests == 2)
+    }
+}

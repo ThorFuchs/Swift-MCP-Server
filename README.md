@@ -21,6 +21,7 @@ A Swift server SDK for the [Model Context Protocol](https://modelcontextprotocol
 | `MCPServiceLifecycle` | Integration with [swift-service-lifecycle](https://github.com/swift-server/swift-service-lifecycle) |
 | `MCPObservability` | swift-log / swift-metrics / service-context hooks; no global bootstrap |
 | `MCPServerTesting` | Test helpers for servers built on `MCPServer` |
+| `MCPClient` | Client for 2026-07-28: MRTR, listen streams, response validation, tool header mirroring ([Docs/CLIENT.md](Docs/CLIENT.md)) |
 | `MCPTasks` | Server-side Tasks extension: durable task handles, polling, input and cancellation ([Docs/TASKS.md](Docs/TASKS.md)) |
 
 HTTP (Streamable HTTP and authorization) ships separately as **Swift-MCP-Server-HTTP**.
