@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import JSON
 import MCPProtocol
+import Synchronization
 
 public struct ExtensionResult: Sendable {
     public let type: ScalarText, schema: JSON
@@ -36,6 +37,49 @@ public struct ExtensionRequest: Sendable {
         self.method = method; self.parametersSchema = parametersSchema; self.resultTypes = resultTypes; self.requiredScopes = requiredScopes; self.rounds = rounds; handler = nil
     }
 }
+/// Official extensions only: a `subscriptions/listen` filter (for example `taskIds`) whose
+/// matching streams receive one of the extension's notifications.
+package struct ExtensionSubscription: Sendable {
+    /// Key inside `params.notifications`; its value is an array of identifiers.
+    package let filter: ScalarText
+    /// Notification sent to streams that agreed to an identifier; declared by the registration.
+    package let notification: ScalarText
+    /// Returns the requested identifiers the server agrees to (for example the caller's own tasks).
+    package let agree: @Sendable ([String], RequestContext) async throws -> [String]
+    /// Called once the stream is acknowledged, for example to send the current state.
+    package let activated: @Sendable ([String], RequestContext) async -> Void
+    package init(filter: ScalarText, notification: ScalarText,
+                 agree: @escaping @Sendable ([String], RequestContext) async throws -> [String],
+                 activated: @escaping @Sendable ([String], RequestContext) async -> Void = { _, _ in }) {
+        self.filter = filter; self.notification = notification; self.agree = agree; self.activated = activated
+    }
+}
+
+/// Delivers an official extension's subscription notifications to the `subscriptions/listen`
+/// streams of every server its registration is installed in. Servers are held weakly; an
+/// unused relay costs nothing and a dropped server is skipped.
+package final class ExtensionEventRelay: Sendable {
+    private struct Target: Sendable { weak let hub: SubscriptionHub?; let work: UInt64 }
+    private let targets = Mutex<[ObjectIdentifier: Target]>([:])
+    package init() {}
+    func attach(_ hub: SubscriptionHub, work: UInt64) {
+        targets.withLock { table in
+            table = table.filter { $0.value.hub != nil }
+            table[ObjectIdentifier(hub)] = .init(hub: hub, work: work)
+        }
+    }
+    /// Sends `parameters` (without `_meta`) as `method` to every acknowledged stream of
+    /// `principal` whose agreed `filter` identifiers contain `member`. Each delivery is
+    /// validated against that stream's registration; failures close only that stream.
+    package func publish(_ method: ScalarText, filter: ScalarText, member: String, principal: VerifiedPrincipal, parameters: JSON) async throws {
+        let live = targets.withLock { table in table.values.compactMap { target in target.hub.map { ($0, target.work) } } }
+        for (hub, work) in live {
+            try await hub.publish(extension: method, filter: filter, member: member, principal: principal, parameters: parameters,
+                                  budget: try RequestBudget(workUnits: work))
+        }
+    }
+}
+
 public struct ExtensionRegistration: Sendable {
     public let identifier: ScalarText, settingsSchema: JSON
     public let capabilities: JSON?
@@ -43,12 +87,16 @@ public struct ExtensionRegistration: Sendable {
     /// Official MCP extensions only: names the specification reserves outside the
     /// namespace (for example `tasks/get` and `resultType: "task"`). Not public API.
     package private(set) var reservedNames: Set<ScalarText> = []
+    /// Official MCP extensions only: `subscriptions/listen` filters and their relay.
+    package private(set) var subscriptions: [ExtensionSubscription] = []
+    package private(set) var relay: ExtensionEventRelay?
     /// Official extension with reserved names; non-negotiated calls to its requests
     /// fail with `-32021` (missing required client capability) instead of method-not-found.
     package init(official identifier: ScalarText, settingsSchema: JSON, capabilities: JSON? = nil, reservedNames: Set<ScalarText>,
-        requests: [ExtensionRequest] = [], results: [ExtensionResult] = [], notifications: [ExtensionNotification] = []) {
+        requests: [ExtensionRequest] = [], results: [ExtensionResult] = [], notifications: [ExtensionNotification] = [],
+        subscriptions: [ExtensionSubscription] = [], relay: ExtensionEventRelay? = nil) {
         self.init(identifier: identifier, settingsSchema: settingsSchema, capabilities: capabilities, requests: requests, results: results, notifications: notifications)
-        self.reservedNames = reservedNames
+        self.reservedNames = reservedNames; self.subscriptions = subscriptions; self.relay = relay
     }
     public init(identifier: ScalarText, settingsSchema: JSON, capabilities: JSON? = nil, requests: [ExtensionRequest] = [], results: [ExtensionResult] = [], inputs: [ExtensionInput] = [], notifications: [ExtensionNotification] = []) {
         self.identifier = identifier; self.settingsSchema = settingsSchema; self.capabilities = capabilities
@@ -75,16 +123,24 @@ struct PreparedExtensionRequest: Sendable {
     var reserved = false
     var completeResult: PreparedSchema? = nil
 }
+struct PreparedExtensionSubscription: Sendable {
+    let namespace: ScalarText, declaration: ExtensionSubscription
+}
 struct ExtensionRegistry: Sendable {
     struct Entry: Sendable { let identifier: ScalarText, schema: PreparedSchema, capabilities: JSON }
     let entries: [Entry], weight: UInt64
     let requests: [ScalarText: PreparedExtensionRequest], results: [ScalarText: PreparedExtensionResult]
     let inputs: [ScalarText: PreparedExtensionInput], notifications: [ScalarText: PreparedExtensionNotification]
+    var subscriptions: [ScalarText: PreparedExtensionSubscription] = [:]
+    var relays: [ExtensionEventRelay] = []
+    /// Core `SubscriptionFilter` keys; extension filters cannot shadow them.
+    static let coreFilters: Set<String> = ["toolsListChanged", "resourcesListChanged", "promptsListChanged", "resourceSubscriptions"]
     static func prepare(_ input: [ExtensionRegistration], generation: UInt64, budget: RequestBudget, wire: PreparedWire) async throws -> Self {
         guard input.count <= 64 else { throw CoreFailure.limit }
         var names = Set<ScalarText>(), methods = Set<ScalarText>(), entries: [Entry] = [], weight: UInt64 = 0, forms = 0
         var requests: [ScalarText: PreparedExtensionRequest] = [:], results: [ScalarText: PreparedExtensionResult] = [:]
         var inputs: [ScalarText: PreparedExtensionInput] = [:], notifications: [ScalarText: PreparedExtensionNotification] = [:]
+        var subscriptionPlans: [ScalarText: PreparedExtensionSubscription] = [:], relays: [ExtensionEventRelay] = []
         func name(_ value: ScalarText, namespace: ScalarText, reserved: Set<ScalarText> = []) throws {
             let bytes = value.description.utf8
             let scoped = value.description.hasPrefix(namespace.description + "/") && value.description.count > namespace.description.count + 1
@@ -153,8 +209,19 @@ struct ExtensionRegistry: Sendable {
                 if completeOnly, let schema = request.completeResultSchema { prepared.completeResult = try await prepare(schema) }
                 requests[request.method] = prepared
             }
+            guard item.subscriptions.count <= 4 else { throw CoreFailure.limit }
+            for subscription in item.subscriptions {
+                let key = subscription.filter.description
+                guard !key.isEmpty, key.utf8.count <= 64, key.utf8.allSatisfy({ $0 > 32 && $0 < 127 }), !coreFilters.contains(key),
+                      subscriptionPlans[subscription.filter] == nil, notifications[subscription.notification]?.namespace == item.identifier
+                else { throw CoreFailure.invalidInput }
+                subscriptionPlans[subscription.filter] = .init(namespace: item.identifier, declaration: subscription)
+            }
+            if let relay = item.relay { relays.append(relay) }
         }
-        return .init(entries: entries, weight: weight, requests: requests, results: results, inputs: inputs, notifications: notifications)
+        var registry = Self(entries: entries, weight: weight, requests: requests, results: results, inputs: inputs, notifications: notifications)
+        registry.subscriptions = subscriptionPlans; registry.relays = relays
+        return registry
     }
     func negotiate(_ capabilities: JSONObject, budget: RequestBudget) async throws -> JSONObject {
         let requested = capabilities["extensions"]?.objectValue

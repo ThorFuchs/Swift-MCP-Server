@@ -26,6 +26,9 @@ struct SubscriptionFilters: Sendable {
     let raw: JSON
     let tools: Bool, resources: Bool, prompts: Bool
     let uris: Set<ScalarText>
+    /// Agreed identifiers per official-extension filter key (for example `taskIds`).
+    var extensions: [ScalarText: Set<String>] = [:]
+    var activations: [(subscription: ExtensionSubscription, members: [String])] = []
     func accepts(_ event: SubscriptionEvent) -> Bool {
         switch event { case .toolsChanged: tools; case .resourcesChanged: resources; case .promptsChanged: prompts;
         case .resourceUpdated(let uri): uris.contains(uri) }
@@ -39,7 +42,7 @@ actor SubscriptionHub {
     let policy: EventPolicy
     private var entries: [UUID: Entry] = [:]
     init(_ policy: EventPolicy) { self.policy = policy }
-    static func prepare(_ raw: JSON, snapshot: CatalogSnapshot, context: RequestContext, policy: EventPolicy) async throws -> SubscriptionFilters {
+    static func prepare(_ raw: JSON, snapshot: CatalogSnapshot, context: RequestContext, policy: EventPolicy, wire: PreparedWire) async throws -> SubscriptionFilters {
         guard let object = raw.objectValue else { throw CoreFailure.invalidInput }
         let requested = object["resourceSubscriptions"]?.arrayValue ?? []
         guard requested.count <= policy.filters else { throw CoreFailure.limit }
@@ -54,8 +57,31 @@ actor SubscriptionHub {
             if object[name]?.booleanValue == true { members.append(.init(name,value:.boolean(true))) }
         }
         if !uris.isEmpty { members.append(.init("resourceSubscriptions",value:.array(uris.sorted { $0.description.utf8.lexicographicallyPrecedes($1.description.utf8) }.map { .string($0.description) }))) }
-        return .init(raw: try await RuntimeJSON.object(members,budget:context.budget),tools:object["toolsListChanged"]?.booleanValue == true,
+        // Official-extension filters: requesting one without declaring its extension is
+        // -32021; otherwise the extension decides which identifiers it agrees to.
+        var agreed: [ScalarText: Set<String>] = [:], activations: [(subscription: ExtensionSubscription, members: [String])] = []
+        for (key, plan) in snapshot.extensions.subscriptions.sorted(by: { $0.key.description < $1.key.description }) {
+            guard let value = object[key.description] else { continue }
+            guard context.extensions[plan.namespace.description] != nil else {
+                throw try await ProtocolRejection.missingExtension(plan.namespace, wire: wire, budget: context.budget)
+            }
+            guard let items = value.arrayValue, items.count <= policy.filters else { throw CoreFailure.limit }
+            var requested: [String] = []
+            for item in items {
+                guard let member = item.stringValue, !member.isEmpty, member.utf8.count <= 256 else { throw CoreFailure.invalidInput }
+                try await context.budget.consume(UInt64(member.utf8.count) * 8 + 1)
+                if !requested.contains(member) { requested.append(member) }
+            }
+            let accepted = try await plan.declaration.agree(requested, context).filter { requested.contains($0) }
+            guard !accepted.isEmpty else { continue }
+            agreed[key] = Set(accepted)
+            activations.append((plan.declaration, accepted))
+            members.append(.init(key.description, value: .array(accepted.map { .string($0) })))
+        }
+        var filters = SubscriptionFilters(raw: try await RuntimeJSON.object(members,budget:context.budget),tools:object["toolsListChanged"]?.booleanValue == true,
             resources:object["resourcesListChanged"]?.booleanValue == true,prompts:object["promptsListChanged"]?.booleanValue == true,uris:uris)
+        filters.extensions = agreed; filters.activations = activations
+        return filters
     }
     func run(filters: SubscriptionFilters, context: RequestContext, channel: EventChannel, mode _: DeliveryMode, info: JSON) async throws -> JSON {
         let key = try await RequestKey.make(context.id,principal:context.principal,origin:context.origin,budget:context.budget)
@@ -70,6 +96,7 @@ actor SubscriptionHub {
             let ack = try await RuntimeJSON.object([.init("jsonrpc",value:.string("2.0")),.init("method",value:.string("notifications/subscriptions/acknowledged")),.init("params",value:params)],budget:context.budget)
             try context.checkCancellation(); try await channel.emit(ack,as:.SubscriptionsAcknowledgedNotification)
             entries[id]!.ready = true
+            for activation in filters.activations { await activation.subscription.activated(activation.members, context) }
             let end = ContinuousClock.now.advanced(by:.milliseconds(policy.subscriptionLifetimeMilliseconds))
             while entries[id]?.close == false, ContinuousClock.now < end {
                 try context.checkCancellation(); try await context.budget.consume(1)
@@ -127,6 +154,39 @@ actor SubscriptionHub {
                 if error as? CoreFailure == .eventsUnavailable || entry.context.cancellation.cancelled { continue }
                 if var current = entries[id] { current.close = true; entries[id] = current }
                 await entry.channel.abort(failure:true)
+            }
+        }
+    }
+    /// Official-extension delivery (see `ExtensionEventRelay`). Only acknowledged streams of
+    /// `principal` that agreed to `member` under `filter` receive it; a queued older frame for
+    /// the same member is replaced, because every frame carries the complete current state.
+    func publish(extension method: ScalarText, filter: ScalarText, member: String, principal: VerifiedPrincipal,
+                 parameters: JSON, budget: RequestBudget) async throws {
+        guard let base = parameters.objectValue, member.utf8.count <= 256 else { throw CoreFailure.invalidInput }
+        try Task.checkCancellation()
+        try await budget.consume(UInt64(member.utf8.count + 128) * UInt64(entries.count + 1) * 8)
+        let owner = PrincipalKey(principal)
+        let targets = entries.filter { $0.value.ready && !$0.value.close && $0.value.filters.extensions[filter]?.contains(member) == true
+            && PrincipalKey($0.value.context.principal) == owner }
+        for (id, entry) in targets {
+            do {
+                try entry.context.checkCancellation()
+                let budget = entry.context.budget
+                guard let plan = entry.context.extensionRegistry.notifications[method] else { throw CoreFailure.invalidOutput }
+                try await budget.consume(UInt64(entries.count) * 128 + 1)
+                let meta = try await RuntimeJSON.object([.init("io.modelcontextprotocol/subscriptionId", value: entry.context.id.value)], budget: budget)
+                var members = base.filter { $0.key.string != "_meta" }.map { JSONMember($0.key.string, value: $0.value) }
+                members.append(.init("_meta", value: meta))
+                let params = try await RuntimeJSON.object(members, budget: budget)
+                guard try await SchemaPreparation.validate(params, against: plan.schema, budget: budget),
+                      try await entry.channel.wire.validate(meta, as: .NotificationMetaObject, budget: budget) else { throw CoreFailure.invalidOutput }
+                let raw = try await RuntimeJSON.object([.init("jsonrpc", value: .string("2.0")), .init("method", value: .string(method.description)),
+                    .init("params", value: params)], budget: budget)
+                try await entry.channel.emitSupplemental(raw, replaceable: ScalarText(method.description + "\0" + member))
+            } catch {
+                if error as? CoreFailure == .eventsUnavailable || entry.context.cancellation.cancelled { continue }
+                if var current = entries[id] { current.close = true; entries[id] = current }
+                await entry.channel.abort(failure: true)
             }
         }
     }

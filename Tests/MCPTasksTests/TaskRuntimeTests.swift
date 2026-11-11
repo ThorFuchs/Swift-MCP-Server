@@ -345,3 +345,140 @@ private func createdTaskID(_ response: JSON) throws -> String {
         #expect(code(try await respond(server, call("long", id: 2))) == -32603)
     }
 }
+
+// MARK: Phase B: notifications/tasks over subscriptions/listen
+
+/// Frames a listen stream delivered, in order.
+private final class Frames: Sendable {
+    private let items = Mutex<[JSON]>([])
+    func add(_ data: Data) throws { let frame = try json(String(decoding: data, as: UTF8.self)); items.withLock { $0.append(frame) } }
+    var all: [JSON] { items.withLock { $0 } }
+    func methods(_ name: String) -> [JSONObject] {
+        all.compactMap { frame in
+            guard frame.objectValue?["method"]?.stringValue == name else { return nil }
+            return frame.objectValue?["params"]?.objectValue
+        }
+    }
+    func taskNotifications(_ taskID: String) -> [JSONObject] { methods("notifications/tasks").filter { $0["taskId"]?.stringValue == taskID } }
+    func wait(_ what: String, until condition: @Sendable (Frames) -> Bool) async throws {
+        let end = ContinuousClock.now.advanced(by: .seconds(10))
+        while !condition(self) {
+            guard ContinuousClock.now < end else { Issue.record("timed out waiting for \(what)"); throw CancellationError() }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+    }
+}
+private func listen(id: Int, taskIDs: [String], tasks: Bool = true) -> Data {
+    let ids = taskIDs.map { "\"\($0)\"" }.joined(separator: ",")
+    return request("subscriptions/listen", id: id, fields: ", \"notifications\":{\"taskIds\":[\(ids)]}", tasks: tasks)
+}
+/// Opens a listen stream for the body's duration, then closes it and joins the dispatch.
+private func withListener(_ server: Server, _ data: Data, as principal: VerifiedPrincipal = alice,
+                          _ body: (Frames) async throws -> Void) async throws {
+    let frames = Frames()
+    try await withThrowingTaskGroup(of: Void.self) { group in
+        group.addTask {
+            try await server.dispatchEvents(data, principal: principal, origin: ScalarText("host"), mode: .http) { try frames.add($0) }
+        }
+        do { try await body(frames) } catch { await server.closeSubscriptions(); group.cancelAll(); throw error }
+        await server.closeSubscriptions()
+        try await group.waitForAll()
+    }
+}
+
+@Suite(.serialized) struct TaskNotificationCases {
+    @Test func listenersReceiveFullStatusOfTheirOwnTasksOnly() async throws {
+        let runtime = TaskRuntime()
+        let release = Mutex(false)
+        let tool = runtime.tool(definition: try toolDefinition("slow")) { _, _ in
+            while !release.withLock({ $0 }) { try await Task.sleep(for: .milliseconds(2)) }
+            return try text("done")
+        }
+        let server = try await makeServer(runtime, tools: [tool])
+        try await withRuntime(runtime) {
+            let mine = try createdTaskID(try await respond(server, call("slow", id: 1)))
+            let theirs = try createdTaskID(try await respond(server, call("slow", id: 2), as: bob))
+            try await withListener(server, listen(id: 50, taskIDs: [mine, theirs, "unknown"])) { frames in
+                try await frames.wait("acknowledgement") { !$0.methods("notifications/subscriptions/acknowledged").isEmpty }
+                // Only the caller's own task is agreed; foreign and unknown IDs are silently dropped.
+                let ack = try #require(frames.methods("notifications/subscriptions/acknowledged").first)
+                #expect(ack["notifications"]?.objectValue?["taskIds"]?.arrayValue?.compactMap(\.stringValue) == [mine])
+                // The current state follows the acknowledgement, so a listener never misses a fast task.
+                try await frames.wait("initial state") { !$0.taskNotifications(mine).isEmpty }
+                #expect(frames.taskNotifications(mine).first?["status"]?.stringValue == "working")
+                release.withLock { $0 = true }
+                try await frames.wait("completion") { $0.taskNotifications(mine).contains { $0["status"]?.stringValue == "completed" } }
+                let done = try #require(frames.taskNotifications(mine).last)
+                // A complete DetailedTask: inline result, subscription correlation, no resultType.
+                #expect(done["result"]?.objectValue?["content"]?.arrayValue?.first?.objectValue?["text"]?.stringValue == "done")
+                #expect(try done["_meta"]?.objectValue?["io.modelcontextprotocol/subscriptionId"]?.numberValue?.integer(as: Int.self, limits: .balanced) == 50)
+                #expect(done["resultType"] == nil && done["ttlMs"] != nil && done["createdAt"] != nil)
+                #expect(frames.taskNotifications(theirs).isEmpty)
+                // Tasks never put progress or log frames on the stream.
+                #expect(frames.methods("notifications/progress").isEmpty && frames.methods("notifications/message").isEmpty)
+            }
+            _ = try await waitForStatus(server, theirs, "completed", as: bob)
+        }
+    }
+
+    @Test func inputRequestsAndCancellationArriveAsNotifications() async throws {
+        let runtime = TaskRuntime()
+        let asking = runtime.tool(definition: try toolDefinition("ask")) { _, context in
+            let answer = try await context.requestInput(try json(#"{"method":"elicitation/create","params":{"mode":"form","message":"Go?","requestedSchema":{"type":"object","properties":{}}}}"#))
+            return try text(answer.objectValue?["action"]?.stringValue ?? "none")
+        }
+        let waiting = runtime.tool(definition: try toolDefinition("wait")) { _, _ in
+            try await Task.sleep(for: .seconds(60)); return try text("late")
+        }
+        let server = try await makeServer(runtime, tools: [asking, waiting])
+        try await withRuntime(runtime) {
+            let question = try createdTaskID(try await respond(server, call("ask", id: 1)))
+            let doomed = try createdTaskID(try await respond(server, call("wait", id: 2)))
+            _ = try await waitForStatus(server, question, "input_required")
+            try await withListener(server, listen(id: 60, taskIDs: [question, doomed])) { frames in
+                try await frames.wait("input request") { $0.taskNotifications(question).contains { $0["status"]?.stringValue == "input_required" } }
+                let pending = try #require(frames.taskNotifications(question).last { $0["status"]?.stringValue == "input_required" })
+                #expect(pending["inputRequests"]?.objectValue?["input-0"] != nil)
+                let ack = try await respond(server, taskRequest("tasks/update", id: 3, taskID: question,
+                    extra: #", "inputResponses":{"input-0":{"action":"accept","content":{}}}"#))
+                #expect(result(ack)?["resultType"]?.stringValue == "complete")
+                try await frames.wait("answered completion") { $0.taskNotifications(question).contains { $0["status"]?.stringValue == "completed" } }
+                #expect(frames.taskNotifications(question).last?["result"]?.objectValue?["content"]?.arrayValue?.first?.objectValue?["text"]?.stringValue == "accept")
+                _ = try await respond(server, taskRequest("tasks/cancel", id: 4, taskID: doomed))
+                try await frames.wait("cancellation") { $0.taskNotifications(doomed).contains { $0["status"]?.stringValue == "cancelled" } }
+            }
+        }
+    }
+
+    @Test func taskNotificationsRequireTheDeclaredExtension() async throws {
+        let runtime = TaskRuntime()
+        let server = try await makeServer(runtime, tools: [])
+        try await withRuntime(runtime) {
+            let frames = Frames()
+            try await server.dispatchEvents(listen(id: 70, taskIDs: ["anything"], tasks: false), principal: alice,
+                                            origin: ScalarText("host"), mode: .http) { try frames.add($0) }
+            let response = try #require(frames.all.last)
+            #expect(code(response) == -32021)
+            let required = response.objectValue?["error"]?.objectValue?["data"]?.objectValue?["requiredCapabilities"]?.objectValue
+            #expect(required?["extensions"]?.objectValue?[extensionID] != nil)
+            #expect(frames.methods("notifications/subscriptions/acknowledged").isEmpty)
+        }
+    }
+
+    @Test func listenersWithoutTaskFiltersAreUnaffected() async throws {
+        let runtime = TaskRuntime()
+        let tool = runtime.tool(definition: try toolDefinition("quick")) { _, _ in try text("ok") }
+        let server = try await makeServer(runtime, tools: [tool])
+        try await withRuntime(runtime) {
+            try await withListener(server, request("subscriptions/listen", id: 80, fields: #", "notifications":{"toolsListChanged":true}"#)) { frames in
+                try await frames.wait("acknowledgement") { !$0.methods("notifications/subscriptions/acknowledged").isEmpty }
+                let ack = try #require(frames.methods("notifications/subscriptions/acknowledged").first)
+                #expect(ack["notifications"]?.objectValue?["taskIds"] == nil)
+                let id = try createdTaskID(try await respond(server, call("quick", id: 1)))
+                _ = try await waitForStatus(server, id, "completed")
+                try await Task.sleep(for: .milliseconds(50))
+                #expect(frames.methods("notifications/tasks").isEmpty)
+            }
+        }
+    }
+}

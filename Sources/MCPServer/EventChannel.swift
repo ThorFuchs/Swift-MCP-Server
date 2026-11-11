@@ -72,7 +72,7 @@ actor EventChannel {
     }
     // Called only after a negotiated registration-owned params/metadata plan has
     // validated the server-constructed envelope. It uses the same bounded owner.
-    func emitSupplemental(_ value: JSON) async throws { try await emitPrepared(value, definition: nil, replaceable: nil) }
+    func emitSupplemental(_ value: JSON, replaceable: ScalarText? = nil) async throws { try await emitPrepared(value, definition: nil, replaceable: replaceable) }
     private func emitPrepared(_ value: JSON, definition: FrozenWireDefinition?, replaceable: ScalarText?) async throws {
         guard !finishing, !ended, !failed else { throw CoreFailure.eventsUnavailable }
         if let key = replaceable, let index = queue.firstIndex(where: { $0.replaceable == key }) {

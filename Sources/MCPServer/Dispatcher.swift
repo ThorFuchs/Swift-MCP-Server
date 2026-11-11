@@ -362,7 +362,7 @@ struct Dispatcher: Sendable {
                 let result: JSON
                 if method == .listen {
                     guard let channel, let mode else { throw CoreFailure.unknownMethod }
-                    let filters = try await SubscriptionHub.prepare(request.params["notifications"]!, snapshot: lease.snapshot, context: context, policy: eventPolicy)
+                    let filters = try await SubscriptionHub.prepare(request.params["notifications"]!, snapshot: lease.snapshot, context: context, policy: eventPolicy, wire: wire)
                     try await lease.releaseIfOwned()
                     result = try await subscriptions.run(filters: filters, context: context, channel: channel, mode: mode, info: info)
                     guard try await wire.validate(result, as: .SubscriptionsListenResult, budget: budget) else { throw CoreFailure.invalidOutput }
