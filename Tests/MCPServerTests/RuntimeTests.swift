@@ -326,14 +326,18 @@ private let toolResult = #"{"resultType":"complete","content":[{"type":"text","t
             while !release.withLock({ $0 }) { await Task.yield() } // deliberately ignores cancellation
             return try json(toolResult)
         }
-        let config = try ServerConfiguration(deadlineMilliseconds: 100)
+        // The deadline must expire while the uncooperative tool runs, not before it starts:
+        // on a loaded runner, admission and validation alone can take longer than 100 ms.
+        // The tool is entered before the deadline (it starts at dispatch), and sleeping past
+        // the whole deadline after that guarantees it expired during the call.
+        let config = try ServerConfiguration(deadlineMilliseconds: 2000)
         let server = try await make(ServerCatalog(tools: [tool]), configuration: config)
         let child = Task {
             defer { ended.withLock { $0 = true } }
             try await server.dispatch(request("tools/call", fields: #", "name":"wait""#), principal: principal(), origin: ScalarText("origin")) { _ in sends.withLock { $0 += 1 } }
         }
         try await wait { entered.withLock { $0 } }
-        try await Task.sleep(for: .milliseconds(150))
+        try await Task.sleep(for: .milliseconds(2100))
         let active = await server.activity.active
         #expect(!ended.withLock { $0 } && active == 1)
         release.withLock { $0 = true }
