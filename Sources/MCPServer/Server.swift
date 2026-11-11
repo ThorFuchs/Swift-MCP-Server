@@ -86,6 +86,7 @@ public struct Server: Sendable {
             ownership: RequestOwnership(perPrincipal: configuration.requestsPerPrincipal), buffers: BufferedWork(limit: configuration.bufferedBytes),
             catalogs: CatalogStore(snapshot, wireWeight: wire.logicalRetainedUpperBound), wire: wire, info: info,
             instance: ScalarText(UUID().uuidString), cursors: CursorStore(cursors), continuations: continuations, eventPolicy: eventPolicy, eventLedger: EventLedger(eventPolicy), subscriptions: SubscriptionHub(eventPolicy), publisher: AdmissionController(activeLimit: 1, queueLimit: 1), middleware: middleware)
+        for relay in catalog.extensions.compactMap(\.relay) { relay.attach(dispatcher.subscriptions, work: configuration.requestWork) }
         return .init(dispatcher: dispatcher, instrumentation: instrumentation, configuration: configuration)
     }
     /// One bounded request/notification. Loss or cancellation is signaled by the
@@ -164,6 +165,7 @@ public struct Server: Sendable {
     }
     public func replaceCatalog(_ catalog: ServerCatalog) async throws {
         try await dispatcher.catalogs.replace(catalog, wire: dispatcher.wire, configuration: configuration, budget: configuration.preparation.budget())
+        for relay in catalog.extensions.compactMap(\.relay) { relay.attach(dispatcher.subscriptions, work: configuration.requestWork) }
     }
     /// Retaining an old key in the supplied ring admits its unexpired tokens.
     /// Changing epoch or removing that key rejects them. Each new Server also

@@ -5,7 +5,7 @@ import PackageDescription
 let package = Package(
     name: "ExampleStdioServer",
     platforms: [.macOS(.v15), .iOS(.v18)],
-    dependencies: [.package(url: "https://github.com/ThorFuchs/Swift-JSON.git", revision: "e6405a72dd9092d04e24e310c9b03b9d9aa300c4"),
+    dependencies: [.package(url: "https://github.com/ThorFuchs/Swift-JSON.git", from: "1.9.0"),
         .package(url: "https://github.com/apple/swift-crypto.git", "3.0.0"..<"5.0.0"),
         .package(url: "https://github.com/apple/swift-system.git", from: "1.8.1"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.16.1"),

@@ -344,7 +344,7 @@ struct Dispatcher: Sendable {
                 let key = try await RequestKey.make(request.id, principal: principal, origin: origin, budget: budget)
                 try await ownership.insert(key, cancellation: cancellation); slot.key.withLock { $0 = key }
                 let extensions = try await snapshot.extensions.negotiate(request.capabilities, budget: budget)
-                if let supplemental, extensions[supplemental.namespace.description] == nil {
+                if let supplemental, !supplemental.open, extensions[supplemental.namespace.description] == nil {
                     // Reserved official-extension methods (e.g. tasks/get) report the missing
                     // capability (-32021); other supplemental routes stay method-not-found.
                     if supplemental.reserved { throw try await ProtocolRejection.missingExtension(supplemental.namespace, wire: wire, budget: budget) }
@@ -362,7 +362,7 @@ struct Dispatcher: Sendable {
                 let result: JSON
                 if method == .listen {
                     guard let channel, let mode else { throw CoreFailure.unknownMethod }
-                    let filters = try await SubscriptionHub.prepare(request.params["notifications"]!, snapshot: lease.snapshot, context: context, policy: eventPolicy)
+                    let filters = try await SubscriptionHub.prepare(request.params["notifications"]!, snapshot: lease.snapshot, context: context, policy: eventPolicy, wire: wire)
                     try await lease.releaseIfOwned()
                     result = try await subscriptions.run(filters: filters, context: context, channel: channel, mode: mode, info: info)
                     guard try await wire.validate(result, as: .SubscriptionsListenResult, budget: budget) else { throw CoreFailure.invalidOutput }
