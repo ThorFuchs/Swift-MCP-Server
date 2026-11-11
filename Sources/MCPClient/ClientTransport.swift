@@ -12,8 +12,10 @@ public struct OutgoingRequest: Sendable {
     public let name: String?
     /// The complete JSON-RPC request, UTF-8 encoded.
     public let body: Data
-    public init(id: RequestID, method: String, name: String?, body: Data) {
-        self.id = id; self.method = method; self.name = name; self.body = body
+    /// Already-encoded `Mcp-Param-*` headers for `tools/call` (see `ToolHeaders`).
+    public let parameterHeaders: [(name: String, value: String)]
+    public init(id: RequestID, method: String, name: String?, body: Data, parameterHeaders: [(name: String, value: String)] = []) {
+        self.id = id; self.method = method; self.name = name; self.body = body; self.parameterHeaders = parameterHeaders
     }
 }
 
@@ -27,4 +29,12 @@ public struct OutgoingRequest: Sendable {
 /// HTTP closes the stream). Transports never interpret results.
 public protocol ClientTransport: Sendable {
     func exchange(_ request: OutgoingRequest, receive: @escaping @Sendable (Data) async throws -> Void) async throws
+    /// Whether this transport mirrors `x-mcp-header` tool parameters into headers. Such
+    /// transports (Streamable HTTP) require the client to drop tools whose annotations are
+    /// invalid; others may ignore the annotations.
+    var mirrorsToolParameters: Bool { get }
+}
+
+extension ClientTransport {
+    public var mirrorsToolParameters: Bool { false }
 }

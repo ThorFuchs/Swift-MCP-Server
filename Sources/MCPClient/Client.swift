@@ -19,6 +19,10 @@ public actor Client {
     private let transport: any ClientTransport
     private let validator = WireValidator()
     private var nextID = 1
+    /// `x-mcp-header` declarations from the latest `tools/list` pages, by tool name.
+    private var toolHeaders: [String: ToolHeaders] = [:]
+    /// Tools dropped from `tools/list` because of invalid `x-mcp-header` annotations.
+    public private(set) var rejectedTools: [(name: String, reason: String)] = []
 
     public init(transport: any ClientTransport, configuration: ClientConfiguration = .init()) {
         self.transport = transport; self.configuration = configuration
@@ -40,8 +44,17 @@ public actor Client {
 
     // MARK: Tools, resources, prompts
 
+    /// `tools/list`. On transports that mirror tool parameters into headers, tools with
+    /// invalid `x-mcp-header` annotations are excluded and recorded in `rejectedTools`.
     public func listTools(cursor: String? = nil) async throws -> Page<Tool> {
-        try await page("tools/list", key: "tools", cursor: cursor, definition: .ListToolsResult, Tool.init)
+        let page = try await page("tools/list", key: "tools", cursor: cursor, definition: .ListToolsResult, Tool.init)
+        guard transport.mirrorsToolParameters else { return page }
+        var kept: [Tool] = []
+        for tool in page.items {
+            do { toolHeaders[tool.name] = try ToolHeaders(inputSchema: tool.inputSchema); kept.append(tool) }
+            catch { toolHeaders[tool.name] = nil; rejectedTools.append((tool.name, String(describing: error))) }
+        }
+        return Page(items: kept, nextCursor: page.nextCursor, raw: page.raw)
     }
 
     /// `tools/call`. Input requests are answered by the configured handlers; a result type
@@ -50,8 +63,9 @@ public actor Client {
                          onLog: (@Sendable (LogMessage) async -> Void)? = nil) async throws -> ToolResult {
         var params = [JSONMember("name", value: .string(name))]
         if let arguments { params.append(JSONMember("arguments", value: arguments)) }
+        let headers = transport.mirrorsToolParameters ? toolHeaders[name]?.headers(for: arguments) ?? [] : []
         let result = try await perform("tools/call", params: params, name: name, definition: .CallToolResult,
-                                       acceptsExtensionResults: true, onProgress: onProgress, onLog: onLog)
+                                       acceptsExtensionResults: true, parameterHeaders: headers, onProgress: onProgress, onLog: onLog)
         return ToolResult(result)
     }
 
@@ -120,7 +134,7 @@ public actor Client {
 
     /// Sends one request, answers input rounds, and returns the validated final result.
     private func perform(_ method: String, params: [JSONMember] = [], name: String? = nil, definition: FrozenWireDefinition?,
-                         acceptsExtensionResults: Bool = false,
+                         acceptsExtensionResults: Bool = false, parameterHeaders: [(name: String, value: String)] = [],
                          onProgress: (@Sendable (Progress) async -> Void)? = nil,
                          onLog: (@Sendable (LogMessage) async -> Void)? = nil,
                          onEvent: (@Sendable (ListenEvent) async throws -> Void)? = nil) async throws -> JSON {
@@ -133,7 +147,7 @@ public actor Client {
             let body = try request(id: id, method: method, params: params + continuation, progressToken: token, logs: onLog != nil)
             let final = Mutex<JSON?>(nil)
             let validator = self.validator, limits = configuration.limits
-            try await transport.exchange(OutgoingRequest(id: .integer(JSONNumber(integer: id)), method: method, name: name, body: body)) { frame in
+            try await transport.exchange(OutgoingRequest(id: .integer(JSONNumber(integer: id)), method: method, name: name, body: body, parameterHeaders: parameterHeaders)) { frame in
                 let message = try WireCodec.parse(Array(frame), limits: limits).result
                 guard let object = message.objectValue else { throw ClientError.invalidResponse("message is not an object") }
                 if object["id"] != nil, object["method"] == nil {
