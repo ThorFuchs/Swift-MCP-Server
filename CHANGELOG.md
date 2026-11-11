@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- New `MCPSkills` product: Skills over MCP (`io.modelcontextprotocol/skills`, SEP-2640) with
+  `skills/list`, `skills/get`, `resources/directory/read`, SHA-256 manifests and a strict
+  frontmatter parser (Docs/SKILLS.md). Official extensions can be server-declared only.
+
 - New `MCPTasks` product: server-side runtime for the Tasks extension
   (`io.modelcontextprotocol/tasks`, 2026-07-28) with task-backed tools, `tasks/get`,
   `tasks/update` and `tasks/cancel` (ADR-0003, Docs/TASKS.md).
