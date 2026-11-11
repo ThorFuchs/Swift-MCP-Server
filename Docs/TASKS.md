@@ -47,9 +47,17 @@ try await withThrowingTaskGroup(of: Void.self) { group in
 - **Lifetime.** Task work runs as child tasks of `run()`; nothing is detached. `shutdown()`
   or cancelling `run()` cancels remaining work and returns after it joined.
 
+- **Status notifications.** A `subscriptions/listen` request with
+  `notifications.taskIds` receives `notifications/tasks`. Only the caller's own live tasks
+  are agreed (the acknowledgement lists them); unknown and foreign IDs are dropped
+  silently. After the acknowledgement each agreed task's current state is sent, then every
+  change. Each notification is the complete `DetailedTask` (result, error or input
+  requests inline, no `resultType`); a queued older state of the same task is replaced by
+  the newer one. Requesting `taskIds` without declaring the extension returns `-32021`.
+  No progress or log notifications are sent for tasks.
+
 ## Not yet implemented
 
-- `notifications/tasks` over `subscriptions/listen` (optional in the specification).
 - Pluggable durable stores; the runtime keeps tasks in memory.
 
 ## Conformance

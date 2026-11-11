@@ -5,6 +5,9 @@
 - New `MCPTasks` product: server-side runtime for the Tasks extension
   (`io.modelcontextprotocol/tasks`, 2026-07-28) with task-backed tools, `tasks/get`,
   `tasks/update` and `tasks/cancel` (ADR-0003, Docs/TASKS.md).
+- `MCPTasks`: `notifications/tasks` over `subscriptions/listen` (`notifications.taskIds`),
+  owner-filtered, initial state after the acknowledgement, latest-state coalescing.
+  Official extensions can now contribute `subscriptions/listen` filters (package API).
 
 - Platforms: macOS 15+, iOS 18+ and Linux (was macOS 27 only); see ADR-0002. Linux
   uses swift-crypto and blocks SIGPIPE on the transport's own writer thread.
