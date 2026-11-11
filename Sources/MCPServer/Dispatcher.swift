@@ -344,7 +344,7 @@ struct Dispatcher: Sendable {
                 let key = try await RequestKey.make(request.id, principal: principal, origin: origin, budget: budget)
                 try await ownership.insert(key, cancellation: cancellation); slot.key.withLock { $0 = key }
                 let extensions = try await snapshot.extensions.negotiate(request.capabilities, budget: budget)
-                if let supplemental, extensions[supplemental.namespace.description] == nil {
+                if let supplemental, !supplemental.open, extensions[supplemental.namespace.description] == nil {
                     // Reserved official-extension methods (e.g. tasks/get) report the missing
                     // capability (-32021); other supplemental routes stay method-not-found.
                     if supplemental.reserved { throw try await ProtocolRejection.missingExtension(supplemental.namespace, wire: wire, budget: budget) }

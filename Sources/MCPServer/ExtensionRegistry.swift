@@ -90,13 +90,17 @@ public struct ExtensionRegistration: Sendable {
     /// Official MCP extensions only: `subscriptions/listen` filters and their relay.
     package private(set) var subscriptions: [ExtensionSubscription] = []
     package private(set) var relay: ExtensionEventRelay?
+    /// Official MCP extensions only: whether calling the extension's requests requires the
+    /// client to declare the extension. Skills, for example, is declared by the server alone.
+    package private(set) var clientDeclarationRequired = true
     /// Official extension with reserved names; non-negotiated calls to its requests
     /// fail with `-32021` (missing required client capability) instead of method-not-found.
     package init(official identifier: ScalarText, settingsSchema: JSON, capabilities: JSON? = nil, reservedNames: Set<ScalarText>,
         requests: [ExtensionRequest] = [], results: [ExtensionResult] = [], notifications: [ExtensionNotification] = [],
-        subscriptions: [ExtensionSubscription] = [], relay: ExtensionEventRelay? = nil) {
+        subscriptions: [ExtensionSubscription] = [], relay: ExtensionEventRelay? = nil, clientDeclarationRequired: Bool = true) {
         self.init(identifier: identifier, settingsSchema: settingsSchema, capabilities: capabilities, requests: requests, results: results, notifications: notifications)
         self.reservedNames = reservedNames; self.subscriptions = subscriptions; self.relay = relay
+        self.clientDeclarationRequired = clientDeclarationRequired
     }
     public init(identifier: ScalarText, settingsSchema: JSON, capabilities: JSON? = nil, requests: [ExtensionRequest] = [], results: [ExtensionResult] = [], inputs: [ExtensionInput] = [], notifications: [ExtensionNotification] = []) {
         self.identifier = identifier; self.settingsSchema = settingsSchema; self.capabilities = capabilities
@@ -122,6 +126,8 @@ struct PreparedExtensionRequest: Sendable {
     let namespace: ScalarText, registration: ExtensionRequest, parameters: PreparedSchema, headers: [HeaderDeclaration], rounds: PreparedRoundPlan?
     var reserved = false
     var completeResult: PreparedSchema? = nil
+    /// Callable without the client declaring the extension (official, server-declared extensions).
+    var open = false
 }
 struct PreparedExtensionSubscription: Sendable {
     let namespace: ScalarText, declaration: ExtensionSubscription
@@ -206,6 +212,7 @@ struct ExtensionRegistry: Sendable {
                 if let rounds { guard rounds.weight <= 33_554_432 - weight else { throw CoreFailure.limit }; weight += rounds.weight }
                 var prepared = PreparedExtensionRequest(namespace: item.identifier, registration: request, parameters: parameters, headers: headers, rounds: rounds)
                 prepared.reserved = item.reservedNames.contains(request.method)
+                prepared.open = prepared.reserved && !item.clientDeclarationRequired
                 if completeOnly, let schema = request.completeResultSchema { prepared.completeResult = try await prepare(schema) }
                 requests[request.method] = prepared
             }
