@@ -68,6 +68,7 @@ public actor TaskRuntime {
     struct Record: Sendable {
         let id: String
         let owner: Owner
+        let principal: VerifiedPrincipal
         let created: Date
         let expires: Date
         var updated: Date
@@ -99,6 +100,12 @@ public actor TaskRuntime {
     /// Suspended `requestInput` calls, keyed by task ID and input key. Kept outside
     /// actor isolation so a cancellation handler can resume them synchronously.
     private let waiters = Mutex<[String: CheckedContinuation<JSON, any Error>]>([:])
+    /// Delivers `notifications/tasks` to `subscriptions/listen` streams (see `registration()`).
+    private let relay = ExtensionEventRelay()
+    /// Tasks whose current state has not been delivered yet, in change order. Bounded by
+    /// the number of records; repeated changes coalesce into one delivery of the latest state.
+    private var pending: [String] = []
+    private var notifier: AsyncStream<Void>.Continuation?
 
     public init(configuration: TaskRuntimeConfiguration = .init(), now: @escaping @Sendable () -> Date = { Date() }) {
         self.configuration = configuration; self.now = now
@@ -111,14 +118,17 @@ public actor TaskRuntime {
     public func run() async throws {
         guard jobs == nil else { throw TaskRuntimeError.alreadyRunning }
         let (stream, continuation) = AsyncStream.makeStream(of: Job.self)
-        jobs = continuation
+        let (signal, poke) = AsyncStream.makeStream(of: Void.self, bufferingPolicy: .bufferingNewest(1))
+        jobs = continuation; notifier = poke
         await withDiscardingTaskGroup { group in
+            // One serial publisher: notifications for a task never overtake each other.
+            group.addTask { await self.deliver(signal) }
             for await job in stream {
                 group.addTask { await Self.execute(job) }
             }
             group.cancelAll()
         }
-        jobs = nil
+        jobs = nil; notifier = nil; poke.finish(); pending = []
         for id in records.keys where !records[id]!.terminal { settle(id, .cancelled) }
     }
 
@@ -133,8 +143,9 @@ public actor TaskRuntime {
     /// The extension registration to pass to `Server.make` (`extensions:`).
     public nonisolated func registration() throws -> ExtensionRegistration {
         let id = ScalarText(TaskSchemas.identifier)
+        let notification = ScalarText("notifications/tasks")
         return ExtensionRegistration(official: id, settingsSchema: try TaskSchemas.parse(TaskSchemas.settings),
-            reservedNames: [ScalarText("tasks/get"), ScalarText("tasks/update"), ScalarText("tasks/cancel"), ScalarText("task")],
+            reservedNames: [ScalarText("tasks/get"), ScalarText("tasks/update"), ScalarText("tasks/cancel"), ScalarText("task"), notification],
             requests: [
                 ExtensionRequest(method: ScalarText("tasks/get"), parametersSchema: try TaskSchemas.parse(TaskSchemas.taskIdParameters),
                     completeResultSchema: try TaskSchemas.parse(TaskSchemas.getResult)) { input, context in try await self.get(input, context) },
@@ -143,7 +154,14 @@ public actor TaskRuntime {
                 ExtensionRequest(method: ScalarText("tasks/cancel"), parametersSchema: try TaskSchemas.parse(TaskSchemas.taskIdParameters),
                     completeResultSchema: try TaskSchemas.parse(TaskSchemas.acknowledgement)) { input, context in try await self.cancel(input, context) },
             ],
-            results: [ExtensionResult(type: ScalarText("task"), schema: try TaskSchemas.parse(TaskSchemas.createResult), coreMethods: [.callTool])])
+            results: [ExtensionResult(type: ScalarText("task"), schema: try TaskSchemas.parse(TaskSchemas.createResult), coreMethods: [.callTool])],
+            notifications: [ExtensionNotification(method: notification, parametersSchema: try TaskSchemas.parse(TaskSchemas.notification))],
+            // subscriptions/listen with notifications.taskIds: only the caller's own live tasks are
+            // agreed; once acknowledged, each agreed task's current state is sent first.
+            subscriptions: [ExtensionSubscription(filter: ScalarText("taskIds"), notification: notification,
+                agree: { ids, context in await self.subscribable(ids, context) },
+                activated: { ids, _ in await self.changed(ids) })],
+            relay: relay)
     }
 
     /// A tool whose calls become tasks for clients that declare the extension.
@@ -182,7 +200,7 @@ public actor TaskRuntime {
         let created = now()
         let (cancellation, cancel) = AsyncStream.makeStream(of: Void.self, bufferingPolicy: .bufferingNewest(1))
         // The record exists before the reply, so tasks/get resolves as soon as the client sees the ID.
-        records[id] = Record(id: id, owner: owner, created: created, expires: created.addingTimeInterval(Self.seconds(configuration.timeToLive)),
+        records[id] = Record(id: id, owner: owner, principal: request.principal, created: created, expires: created.addingTimeInterval(Self.seconds(configuration.timeToLive)),
                              updated: created, cancel: cancel)
         let context = TaskContext(id: id, runtime: self, budget: try RequestBudget(workUnits: configuration.taskWork), request: request)
         if case .terminated = jobs.yield(Job(id: id, input: input, output: output, work: work, context: context, cancellation: cancellation)) {
@@ -267,11 +285,12 @@ public actor TaskRuntime {
         record.updated = now()
         record.cancel.finish()
         records[id] = record
-        let pending = waiters.withLock { table in
+        changed([id])
+        let suspended = waiters.withLock { table in
             let keys = table.keys.filter { $0.hasPrefix(id + "/") }
             return keys.compactMap { table.removeValue(forKey: $0) }
         }
-        for waiter in pending { waiter.resume(throwing: CancellationError()) }
+        for waiter in suspended { waiter.resume(throwing: CancellationError()) }
     }
 
     // MARK: Context operations
@@ -279,6 +298,7 @@ public actor TaskRuntime {
     func setMessage(_ id: String, _ message: String?) {
         guard var record = records[id], !record.terminal else { return }
         record.message = message; record.updated = now(); records[id] = record
+        changed([id])
     }
 
     func requestInput(_ id: String, _ request: JSON) async throws -> JSON {
@@ -288,6 +308,7 @@ public actor TaskRuntime {
         record.nextInput += 1
         record.inputs.append((key, request)); record.status = .inputRequired; record.updated = now()
         records[id] = record
+        changed([id])
         let slot = id + "/" + key
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<JSON, any Error>) in
@@ -323,6 +344,7 @@ public actor TaskRuntime {
             if record.inputs.isEmpty, record.status == .inputRequired { record.status = .working }
             record.updated = now()
             records[record.id] = record
+            changed([record.id])
         }
         return try await RuntimeJSON.object([.init("resultType", value: .string("complete"))], budget: context.budget)
     }
@@ -332,8 +354,46 @@ public actor TaskRuntime {
         if !record.terminal {
             record.status = .cancelled; record.updated = now(); records[record.id] = record
             record.cancel.yield()
+            changed([record.id])
         }
         return try await RuntimeJSON.object([.init("resultType", value: .string("complete"))], budget: context.budget)
+    }
+
+    // MARK: Status notifications
+
+    /// The requested task IDs that `context`'s principal owns; others are silently not agreed.
+    func subscribable(_ ids: [String], _ context: RequestContext) -> [String] {
+        expire()
+        let owner = Owner(context.principal)
+        return ids.filter { records[$0]?.owner == owner }
+    }
+
+    /// Queues the current state of these tasks for delivery.
+    func changed(_ ids: [String]) {
+        guard let notifier else { return }
+        for id in ids where records[id] != nil && !pending.contains(id) { pending.append(id) }
+        notifier.yield()
+    }
+
+    /// Takes the next task to deliver with its current `DetailedTask` (without `resultType`).
+    func nextNotification() async -> (id: String, principal: VerifiedPrincipal, task: JSON)? {
+        while !pending.isEmpty {
+            let id = pending.removeFirst()
+            guard let record = records[id], let budget = try? RequestBudget(workUnits: configuration.taskWork),
+                  let task = try? await taskObject(record, detailed: true, budget: budget) else { continue }
+            return (id, record.principal, task)
+        }
+        return nil
+    }
+
+    private nonisolated func deliver(_ signal: AsyncStream<Void>) async {
+        for await _ in signal {
+            while let next = await nextNotification() {
+                // A failing stream is closed by the server; other streams and the task are unaffected.
+                try? await relay.publish(ScalarText("notifications/tasks"), filter: ScalarText("taskIds"), member: next.id,
+                                         principal: next.principal, parameters: next.task)
+            }
+        }
     }
 
     /// Unknown, expired and other principals' tasks are indistinguishable: `-32602`.

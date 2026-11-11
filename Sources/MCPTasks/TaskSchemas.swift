@@ -40,6 +40,16 @@ enum TaskSchemas {
         "error":{"type":"object","required":["code","message"]},
         "inputRequests":{"type":"object"}}}]}
     """#
+    /// `notifications/tasks` params: `NotificationParams & DetailedTask` (no `resultType`).
+    static let notification = #"""
+    {"allOf":[\#(task),
+      {"type":"object","properties":{
+        "_meta":{"type":"object"},
+        "result":{"type":"object"},
+        "error":{"type":"object","required":["code","message"]},
+        "inputRequests":{"type":"object"}},
+       "not":{"required":["resultType"]}}]}
+    """#
     /// `UpdateTaskResult` / `CancelTaskResult`: empty acknowledgement.
     static let acknowledgement = #"{"type":"object","required":["resultType"],"properties":{"resultType":{"const":"complete"}}}"#
 
