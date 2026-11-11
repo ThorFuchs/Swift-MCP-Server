@@ -18,9 +18,16 @@ let result = try await client.callTool("search", arguments: arguments) { progres
 try await client.listen(filters) { event in handle(event) }             // subscriptions/listen
 ```
 
-Transports: `HTTPClientTransport` (Swift-MCP-Server-HTTP, Streamable HTTP on
-AsyncHTTPClient) and `LoopbackTransport` (`MCPServerTesting`, in-process against a
-`Server`). A stdio child-process transport follows.
+Transports:
+
+- `HTTPClientTransport` (Swift-MCP-Server-HTTP): Streamable HTTP on AsyncHTTPClient.
+- `StdioClientTransport` (`MCPClientStdio`, macOS and Linux): launches the server with
+  swift-subprocess. The host runs `run()` in its own child task and calls `shutdown()`
+  (closes the server's input) or cancels `run()` (SIGTERM, then SIGKILL after
+  `terminationGrace`). Responses are routed by `id`, progress by `progressToken`, listen
+  events by `subscriptionId`; log messages cannot be correlated on stdio and are dropped.
+  Cancelling a call sends `notifications/cancelled`.
+- `LoopbackTransport` (`MCPServerTesting`): in-process against a `Server`.
 
 ## Behavior
 
@@ -48,5 +55,4 @@ scenarios of `@modelcontextprotocol/conformance` 0.2.0-alpha.12 for 2026-07-28 (
 
 ## Not yet implemented
 
-- stdio child-process transport (`MCPClientStdio`).
 - OAuth (`MCPClientAuthorization`), Tasks and Skills client helpers.
