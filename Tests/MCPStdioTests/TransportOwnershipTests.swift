@@ -124,8 +124,12 @@ private func awaitWorker(_ io: FileDescriptorIO) async throws -> UInt {
     }
     @Test func parentCancellationAndRepeatedNeverStartedCleanup() async throws {
         let server = try await ownershipServer()
+        // /dev/fd counts the whole test process, and other suites open descriptors in
+        // parallel. A leak of even one descriptor per iteration adds at least `iterations`;
+        // the tolerance only absorbs concurrent tests and stays far below that signal.
+        let iterations = 512, tolerance = 64
         let before = try openFDCount()
-        for _ in 0..<32 {
+        for _ in 0..<iterations {
             let p = try testPipe(), q = try testPipe()
             do {
                 let t = try StdioTransport(input:p.readEnd,output:q.writeEnd,inputOwnership:.owned,outputOwnership:.owned)
@@ -133,7 +137,8 @@ private func awaitWorker(_ io: FileDescriptorIO) async throws -> UInt {
             }
             try p.writeEnd.close(); try q.readEnd.close()
         }
-        #expect(try openFDCount() <= before + 1)
+        let after = try openFDCount()
+        #expect(after - before < tolerance, "\(after - before) descriptors more after \(iterations) never-started transports")
         let p = try testPipe(), q = try testPipe()
         defer { try? p.writeEnd.close(); try? q.readEnd.close() }
         let t = try StdioTransport(input:p.readEnd,output:q.writeEnd,inputOwnership:.owned,outputOwnership:.owned)
