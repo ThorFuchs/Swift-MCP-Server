@@ -17,7 +17,7 @@ let package = Package(
         // dependency would create a second package with the same modules. Pre-1.0: `main`.
         .package(url: "https://github.com/ThorFuchs/Swift-MCP-Server.git", branch: "main"),
         .package(url: "https://github.com/ThorFuchs/Swift-MCP-Server-HTTP.git", branch: "main"),
-        .package(url: "https://github.com/ThorFuchs/Swift-JSON.git", from: "1.8.0"),
+        .package(url: "https://github.com/ThorFuchs/Swift-JSON.git", from: "1.9.0"),
         .package(url: "https://github.com/apple/swift-system.git", from: "1.8.1"),
         .package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.13.9"),
     ],
