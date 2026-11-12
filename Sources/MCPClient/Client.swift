@@ -15,7 +15,7 @@ import Synchronization
 public actor Client {
     public static let protocolVersion = "2026-07-28"
 
-    public let configuration: ClientConfiguration
+    public nonisolated let configuration: ClientConfiguration
     private let transport: any ClientTransport
     private let validator = WireValidator()
     private var nextID = 1
@@ -214,6 +214,11 @@ public actor Client {
             JSONMember("method", value: .string(method)), JSONMember("params", value: .object(try JSONObject(members: parameters)))]))
         return try WireCodec.write(message, limits: configuration.limits).result
     }
+
+    /// Answers MRTR input requests (`{key: {"method": …, "params": …}}`) with the configured
+    /// handlers and returns the validated responses by key, for extensions that carry input
+    /// requests outside `tools/call`, such as `tasks/update`.
+    public func answerInputRequests(_ requests: JSONObject) async throws -> JSON { try await answer(requests) }
 
     /// Answers every input request with its handler; results are validated before sending.
     private func answer(_ requests: JSONObject) async throws -> JSON {
