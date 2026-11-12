@@ -1,6 +1,6 @@
 # SDK roadmap: complete server SDK and a stable client
 
-Status: updated 2026-11-11 (first version 2026-11-10). Scope: protocol revision 2026-07-28
+Status: updated 2026-11-12 (first version 2026-11-10). Scope: protocol revision 2026-07-28
 only; no initialization-based (2025-11-25 and earlier) compatibility on either side.
 Related: [TASKS-ROADMAP.md](TASKS-ROADMAP.md), ADR-0003 (Tasks), ADR-0004 (task store),
 ADR-0005 (client).
@@ -17,15 +17,16 @@ Referee: `@modelcontextprotocol/conformance` 0.2.0-alpha.12 (latest alpha on 202
 | Streamable HTTP, standard and custom headers, protected resource metadata, bearer authorization | done (Swift-MCP-Server-HTTP) | referee, HTTP tests |
 | Tasks phase A: 10 official scenarios | done (#6, #8) | 10/10, gated in HTTP CI (HTTP #2) |
 | Tasks phase B: `notifications/tasks` over listen | done (#10) | 4 tests, full regression |
-| S2 Skills (`MCPSkills`, SEP-2640) | in review (#11, HTTP #2) | 9 tests, referee 45/45 checks |
-| CI gate for implemented extensions (13 scenarios) | in review (HTTP #2) | gate fails when results are missing |
+| Tasks phase C: `TaskStore`, `TaskStoreConformanceKit`, `MCPTasksSQLite`, restart policy | in review (#17) | kit passes for in-memory and SQLite (including reopen); restart policy tests |
+| S2 Skills (`MCPSkills`, SEP-2640) | done (#11, HTTP #2) | 9 tests, referee 45/45 checks |
+| CI gate for implemented extensions (13 scenarios) | done (HTTP #2) | gate fails when results are missing |
 
 ### Client
 
 | Area | State | Evidence |
 |---|---|---|
-| C1 `MCPClient`: discover, tools, resources, prompts, complete, listen, generic requests, MRTR driver, schema validation, typed errors | done, not yet in a PR (`feat/client-core`) | 13 tests |
-| C2 transports: `LoopbackTransport`, `MCPClientStdio` (swift-subprocess), `MCPHTTPClient` (AsyncHTTPClient, JSON and SSE) | done, not yet in a PR (`feat/client-core`, HTTP `feat/http-client`) | stdio tests against a real server process; HTTP end-to-end tests against `MCPHTTP` |
+| C1 `MCPClient`: discover, tools, resources, prompts, complete, listen, generic requests, MRTR driver, schema validation, typed errors | in review (#16) | 18 tests in 6 suites |
+| C2 transports: `LoopbackTransport`, `MCPClientStdio` (swift-subprocess), `MCPHTTPClient` (AsyncHTTPClient, JSON and SSE) | stdio in review (#16); HTTP on `feat/http-client`, PR after #16 | stdio tests against a real server process; HTTP end-to-end tests against `MCPHTTP` |
 | `x-mcp-header` mirroring and invalid-tool rejection | done | spec encoding examples, referee |
 | Client conformance | **8/8 non-authorization scenarios, 64/64 checks** | `Scripts/client-conformance.sh` (CI gate on the branch) |
 
@@ -35,7 +36,6 @@ Referee: `@modelcontextprotocol/conformance` 0.2.0-alpha.12 (latest alpha on 202
 
 | ID | Item | Estimate | Exit criterion |
 |---|---|---|---|
-| T-C | Tasks phase C: `TaskStore` protocol, store conformance kit, `MCPTasksSQLite`, restart semantics (ADR-0004) | 5–7 days | kit passes for in-memory and SQLite on macOS and Linux; restart test |
 | T-B2 | Tasks phase B remainder: compiler-enforced single completion (`~Copyable` token), typed `TaskFailure`, DocC article, Explorer example | 1–2 days | API review |
 | S3 | MCP Apps helpers (`ui://` resources, `text/html;profile=mcp-app`, tool `_meta` UI reference, client MIME negotiation) | 2–3 days | example plus tests |
 | S5 | Resource-server DPoP: decide whether `MCPHTTPAuthorization` validates DPoP-bound tokens (ext-auth) | 1 day investigation | ADR |
@@ -49,8 +49,8 @@ Referee: `@modelcontextprotocol/conformance` 0.2.0-alpha.12 (latest alpha on 202
 |---|---|---|
 | R1 | SwiftNIO early-EOF fix for macOS 27 ([apple/swift-nio#3783](https://github.com/apple/swift-nio/pull/3783), open) | Swift-MCP-Server-HTTP cannot release on a SwiftNIO without it |
 | R2 | Release build of the HTTP fixture fails to link (`NIOHTTPServer.Connection.HTTPProtocol` metadata, swift-http-server) | conformance runs only in debug (slow, 90 s scenario timeout) |
-| R3 | Two timing-dependent Linux tests (`deadlineJoinsUncooperativeCallbackAndBoundsRetainedWork`, `parentCancellationAndRepeatedNeverStartedCleanup` descriptor count) and one Explorer test (`deadlineOfPartialResponseJoinsTask`) | flaky CI hides real failures |
-| R4 | CI access to the private core repository (the self-hosted runner only has a cached checkout) | every core change needs a manual cache refresh until a read-only key exists or the repository is public |
+| R3 | Timing-dependent tests: one Explorer test (`deadlineOfPartialResponseJoinsTask`), `realStdioExampleFragments…` under load, and `eofCancellationAndBrokenOutputSettle` on Linux (a closed output can surface as `CoreFailure.eventOverflow` from the event channel before the transport reports `StdioFailure.brokenPipe`; the transport should report the pipe failure first) | flaky CI hides real failures |
+| R4 | CI access to the private core and HTTP repositories (the self-hosted runner only has cached checkouts; macOS cleared them once already) | every core change needs a manual cache refresh until a read-only key exists or the repositories are public; Swift-SQLite is public since 2026-11-12 |
 | R5 | Linux CI for Swift-MCP-Server-HTTP (only macOS 27 today) | Linux is a supported platform |
 | R6 | Public API review, DocC for every product, semantic-versioning policy, `1.0.0` tag | stable promise |
 
@@ -74,15 +74,40 @@ loopback. Authorization stays outside the stable surface until C3.
 
 | ID | Item | Referee scenarios | Estimate |
 |---|---|---|---|
-| C3 | `MCPClientAuthorization` (OAuth 2.1: discovery, CIMD, DCR, PKCE, scopes and step-up, token endpoint methods, refresh, `iss`, AS migration, DPoP; client credentials, enterprise-managed, WIF) with a host-supplied token store | about 25 `auth/*` | 4–6 weeks |
+| C3 | `MCPClientAuthorization`: OAuth 2.1 client with a host-supplied user agent, token store and keys (slices A1–A6 below) | 25 core + 6 extension `auth/*` | 4–6 weeks |
 | C4 | Tasks client (create, poll at `pollIntervalMs`, `tasks/update`, cancel, status stream) and Skills client (no prefetch, digest/size/frontmatter verification) | 4 Skills scenarios | 1–2 weeks |
+
+### C3 in detail: client authorization
+
+Today the server side has protected resource metadata (RFC 9728), `WWW-Authenticate`
+with scopes and bearer validation through a host verifier; only DPoP (S5) is open. The
+client side has nothing yet. Referee scenarios for 2026-07-28 (0.2.0-alpha.12):
+
+| Slice | Content | Referee scenarios |
+|---|---|---|
+| A1 Discovery | Protected resource metadata from `WWW-Authenticate` and well-known paths; authorization server metadata (RFC 8414, OpenID Connect); issuer and resource checks | `metadata-default`, `metadata-var1`–`var3`, `metadata-issuer-mismatch`, `resource-mismatch` (6) |
+| A2 Registration | Client ID metadata documents (CIMD), pre-registration, dynamic client registration as fallback | `basic-cimd`, `pre-registration` (2) |
+| A3 Code flow | Authorization code with PKCE and `resource`; token endpoint authentication `client_secret_basic`, `client_secret_post`, `none`; `iss` checks (RFC 9207) | `token-endpoint-auth-*` (3), `iss-*` (6) |
+| A4 Scopes and refresh | Scopes from `WWW-Authenticate` or `scopes_supported`, omitted when undefined, step-up, retry limit; `offline_access` and refresh tokens | `scope-*` (5), `offline-access-*` (2) |
+| A5 Lifecycle | Authorization server migration; token store protocol; `MCPHTTPClient` retries 401/403 once through the authorization handler | `authorization-server-migration` (1) |
+| A6 Extensions | Client credentials (JWT and basic), enterprise-managed authorization, workload identity federation (JWT bearer), DPoP with nonces | 6 extension scenarios |
+
+Decisions for an ADR before A1:
+1. Location: `MCPClientAuthorization` in Swift-MCP-Server-HTTP next to `MCPHTTPClient`
+   (authorization exists only over HTTP).
+2. Host-supplied parts: the user agent for the authorization redirect, the token store and
+   signing keys (`private_key_jwt`, DPoP). The library never owns host credentials.
+3. Cryptography through CryptoKit / swift-crypto only (PKCE, JWT signatures, DPoP proofs).
+4. DPoP together with S5, so the server can validate the proofs the client creates.
+
+Order inside C3: ADR, A1–A3 (the common interactive case), then A4–A6.
 
 ## 4. Order
 
-1. Merge #11 and HTTP #2 (Skills, extension gate).
-2. CS1: client PRs; then CS2–CS4 and tag the client's first stable surface.
-3. R3 and R4 (reliable CI), T-B2, T-C (durable tasks).
-4. C4, then C3 (largest block).
+1. Merge #16 (client) and #17 (Tasks phase C); then the HTTP client PR.
+2. CS2–CS5 and tag the client's first stable surface (0.x).
+3. R3 and R4 (reliable CI), T-B2.
+4. C4 (Tasks and Skills client), then C3 (authorization, largest block).
 5. S3, S5, S2b; S4 when Server Cards reach Beta.
 6. R1, R2, R5, R6 and the 1.0 release of the server SDK.
 
