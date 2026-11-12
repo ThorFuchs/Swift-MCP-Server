@@ -28,8 +28,9 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-metrics.git", from: "2.12.0"),
         .package(url: "https://github.com/apple/swift-service-context.git", from: "1.3.0"),
         .package(url: "https://github.com/apple/swift-system.git", from: "1.8.1"),
-        // Durable task store backend (ADR-0004); used only by MCPTasksSQLite.
-        .package(url: "https://github.com/ThorFuchs/Swift-SQLite.git", from: "0.1.0"),
+        // Durable task store backend (ADR-0004); used only by MCPTasksSQLite. Pinned to 0.1.x:
+        // 0.2.0 changes SQLiteError and the transaction API (migration planned with that release).
+        .package(url: "https://github.com/ThorFuchs/Swift-SQLite.git", .upToNextMinor(from: "0.1.0")),
     ],
     targets: [
         .target(name: "MCPProtocol", dependencies: [.product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux])), .product(name: "JSON", package: "swift-json"), .product(name: "JSONSchema", package: "swift-json")], resources: [.copy("Resources")]),
