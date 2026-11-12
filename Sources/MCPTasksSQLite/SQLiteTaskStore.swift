@@ -249,9 +249,8 @@ public final class SQLiteTaskStore: TaskStore {
                 result: try row.optionalBlob(9).map { try decode($0, limit: limit) },
                 failure: failure, inputRequests: inputs, nextInput: Int(try row.integer(13)),
                 cancellationRequested: try row.integer(14) != 0, version: try row.integer(15))
-        } catch let error as SQLiteError {
-            if case .typeMismatch = error { throw TaskStoreError.invalidRecord }
-            throw error
+        } catch let error as SQLiteError where error.code == .typeMismatch {
+            throw TaskStoreError.invalidRecord
         }
     }
 
@@ -265,7 +264,7 @@ public final class SQLiteTaskStore: TaskStore {
     private func translate<T: Sendable>(_ operation: () async throws(SQLiteError) -> T) async throws -> T {
         do { return try await operation() }
         catch {
-            switch error {
+            switch error.code {
             case .commitOutcomeUnknown: throw TaskStoreError.outcomeUnknown
             case .resultTooLarge, .tooBig: throw TaskStoreError.payloadTooLarge
             case .interrupted: throw CancellationError()

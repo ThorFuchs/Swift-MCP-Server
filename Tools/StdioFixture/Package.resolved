@@ -96,8 +96,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/ThorFuchs/Swift-SQLite.git",
       "state" : {
-        "revision" : "dcc4172e5770a1a989d6fc541dc71bd7917519db",
-        "version" : "0.1.0"
+        "revision" : "448cc8d9507f1ff6adce3eeac44568cc364ed5c3",
+        "version" : "0.2.0"
       }
     },
     {
