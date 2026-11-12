@@ -92,6 +92,15 @@
       }
     },
     {
+      "identity" : "swift-sqlite",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ThorFuchs/Swift-SQLite.git",
+      "state" : {
+        "revision" : "dcc4172e5770a1a989d6fc541dc71bd7917519db",
+        "version" : "0.1.0"
+      }
+    },
+    {
       "identity" : "swift-system",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-system.git",
