@@ -3,6 +3,7 @@ import Foundation
 import JSON
 import MCPProtocol
 import MCPServer
+import MCPSkillsFormat
 
 enum SkillSchemas {
     static let settings = #"{"type":"object"}"#

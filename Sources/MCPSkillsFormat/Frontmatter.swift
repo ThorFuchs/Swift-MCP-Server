@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Strict parser for the YAML subset used by Agent Skills `SKILL.md` frontmatter.
+import Foundation
 
 /// A frontmatter value in author order. Encodes as the equivalent JSON value.
-indirect enum FrontmatterValue: Sendable, Equatable, Encodable {
+package indirect enum FrontmatterValue: Sendable, Equatable, Encodable {
     case string(String), integer(Int64), double(Double), boolean(Bool), null
     case sequence([FrontmatterValue])
     case mapping([(key: String, value: FrontmatterValue)])
 
-    static func == (lhs: Self, rhs: Self) -> Bool {
+    package static func == (lhs: Self, rhs: Self) -> Bool {
         switch (lhs, rhs) {
         case (.string(let a), .string(let b)): a == b
         case (.integer(let a), .integer(let b)): a == b
@@ -27,7 +28,7 @@ indirect enum FrontmatterValue: Sendable, Equatable, Encodable {
         init?(stringValue: String) { self.stringValue = stringValue }
         init?(intValue: Int) { nil }
     }
-    func encode(to encoder: any Encoder) throws {
+    package func encode(to encoder: any Encoder) throws {
         switch self {
         case .string(let value): var c = encoder.singleValueContainer(); try c.encode(value)
         case .integer(let value): var c = encoder.singleValueContainer(); try c.encode(value)
@@ -42,18 +43,11 @@ indirect enum FrontmatterValue: Sendable, Equatable, Encodable {
             for member in members { try c.encode(member.value, forKey: Key(member.key)) }
         }
     }
-    subscript(key: String) -> FrontmatterValue? {
+    package subscript(key: String) -> FrontmatterValue? {
         guard case .mapping(let members) = self else { return nil }
         return members.first { $0.key == key }?.value
     }
-    var string: String? { if case .string(let value) = self { value } else { nil } }
-}
-
-/// Why a `SKILL.md` could not be served. Thrown when a catalog is built, never at request time.
-public struct SkillDefinitionError: Error, Sendable, Equatable, CustomStringConvertible {
-    public let skill: String
-    public let reason: String
-    public var description: String { "\(skill): \(reason)" }
+    package var string: String? { if case .string(let value) = self { value } else { nil } }
 }
 
 /// Splits `SKILL.md` into its frontmatter mapping. Supported YAML: block mappings and
@@ -61,10 +55,10 @@ public struct SkillDefinitionError: Error, Sendable, Equatable, CustomStringConv
 /// sequences of scalars and comments. Anchors, aliases, tags, flow mappings, tabs and
 /// duplicate keys are rejected rather than guessed, so the served `frontmatter` is
 /// always the value a YAML 1.2 core-schema parser reads from the same bytes.
-enum Frontmatter {
-    struct Failure: Error { let line: Int, reason: String }
+package enum Frontmatter {
+    package struct Failure: Error { package let line: Int, reason: String }
 
-    static func parse(_ markdown: String) throws(Failure) -> FrontmatterValue {
+    package static func parse(_ markdown: String) throws(Failure) -> FrontmatterValue {
         var lines = markdown.split(separator: "\n", omittingEmptySubsequences: false).map { line -> Substring in
             line.hasSuffix("\r") ? line.dropLast() : line
         }
@@ -323,8 +317,8 @@ enum Frontmatter {
 }
 
 extension StringProtocol {
-    var trimmingLeadingSpaces: String { String(drop { $0 == " " }) }
-    var trimmingTrailingSpaces: String {
+    package var trimmingLeadingSpaces: String { String(drop { $0 == " " }) }
+    package var trimmingTrailingSpaces: String {
         var text = String(self)
         while text.last == " " { text.removeLast() }
         return text

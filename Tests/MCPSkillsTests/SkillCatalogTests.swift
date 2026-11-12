@@ -5,6 +5,7 @@ import JSON
 import MCPProtocol
 import MCPServer
 @testable import MCPSkills
+import MCPSkillsFormat
 #if canImport(CryptoKit)
 import CryptoKit
 #else

@@ -17,6 +17,7 @@ public struct Page<Item: Sendable>: Sendable {
     public let items: [Item]
     public let nextCursor: String?
     public let raw: JSON
+    public init(items: [Item], nextCursor: String?, raw: JSON) { self.items = items; self.nextCursor = nextCursor; self.raw = raw }
 }
 
 public struct Tool: Sendable {
