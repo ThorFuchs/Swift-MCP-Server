@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- New `MCPClient` product: client for 2026-07-28 with MRTR, listen streams, schema
+  validation and `x-mcp-header` mirroring (ADR-0005, Docs/CLIENT.md). `MCPServerTesting`
+  gains `LoopbackTransport`; `MCPClientStdio` launches stdio servers with swift-subprocess.
+
 - New `MCPSkills` product: Skills over MCP (`io.modelcontextprotocol/skills`, SEP-2640) with
   `skills/list`, `skills/get`, `resources/directory/read`, SHA-256 manifests and a strict
   frontmatter parser (Docs/SKILLS.md). Official extensions can be server-declared only.
