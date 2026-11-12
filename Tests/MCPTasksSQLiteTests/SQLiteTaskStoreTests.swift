@@ -92,7 +92,12 @@ private func record(_ id: String) -> TaskRecord {
             let store = try await SQLiteTaskStore.open(path: path)
             try await store.database.write { (transaction) throws(SQLiteError) in try transaction.execute("PRAGMA user_version = 99") }
             await store.close()
-            await #expect(throws: SQLiteError.schemaTooNew(databaseVersion: 99, supportedVersion: 1)) { try await SQLiteTaskStore.open(path: path) }
+            await #expect {
+                try await SQLiteTaskStore.open(path: path)
+            } throws: { error in
+                guard let error = error as? SQLiteError else { return false }
+                return error.code == .schemaTooNew && error.databaseVersion == 99 && error.supportedVersion == 1
+            }
         }
     }
 }
