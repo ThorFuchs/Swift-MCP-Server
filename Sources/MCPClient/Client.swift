@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 import Foundation
 import JSON
+import JSONSchema
+import MCPJSONSchemaAdapter
 import MCPProtocol
 import Synchronization
 
@@ -21,6 +23,8 @@ public actor Client {
     private var nextID = 1
     /// `x-mcp-header` declarations from the latest `tools/list` pages, by tool name.
     private var toolHeaders: [String: ToolHeaders] = [:]
+    /// `outputSchema` of every tool from the latest `tools/list` pages, by tool name.
+    private var outputSchemas: [String: JSON] = [:]
     /// Tools dropped from `tools/list` because of invalid `x-mcp-header` annotations.
     public private(set) var rejectedTools: [(name: String, reason: String)] = []
 
@@ -48,6 +52,7 @@ public actor Client {
     /// invalid `x-mcp-header` annotations are excluded and recorded in `rejectedTools`.
     public func listTools(cursor: String? = nil) async throws -> Page<Tool> {
         let page = try await page("tools/list", key: "tools", cursor: cursor, definition: .ListToolsResult, Tool.init)
+        for tool in page.items { outputSchemas[tool.name] = tool.outputSchema }
         guard transport.mirrorsToolParameters else { return page }
         var kept: [Tool] = []
         for tool in page.items {
@@ -66,7 +71,15 @@ public actor Client {
         let headers = transport.mirrorsToolParameters ? toolHeaders[name]?.headers(for: arguments) ?? [] : []
         let result = try await perform("tools/call", params: params, name: name, definition: .CallToolResult,
                                        acceptsExtensionResults: true, parameterHeaders: headers, onProgress: onProgress, onLog: onLog)
-        return ToolResult(result)
+        let tool = ToolResult(result)
+        // A successful result of a tool with an outputSchema must carry conforming structuredContent.
+        if configuration.validatesStructuredContent, tool.resultType == "complete", !tool.isError, let schema = outputSchemas[name] {
+            guard let structured = tool.structuredContent else { throw ClientError.invalidResponse("\(name) result without structuredContent") }
+            guard try await validator.conforms(structured, to: schema) else {
+                throw ClientError.invalidResponse("structuredContent of \(name) does not match its outputSchema")
+            }
+        }
+        return tool
     }
 
     public func listResources(cursor: String? = nil) async throws -> Page<Resource> {
@@ -232,6 +245,13 @@ public actor Client {
             case "elicitation/create":
                 guard let elicitation = configuration.elicitation else { throw ClientError.unsupportedInput(method: method) }
                 response = try await elicitation.handler(params); definition = .ElicitResult
+                // Accepted form content must match the requested schema before it is sent.
+                if response.objectValue?["action"]?.stringValue == "accept", let content = response.objectValue?["content"],
+                   let schema = params.objectValue?["requestedSchema"] {
+                    guard try await validator.conforms(content, to: schema) else {
+                        throw ClientError.invalidResponse("elicitation content does not match requestedSchema")
+                    }
+                }
             case "sampling/createMessage":
                 guard let sampling = configuration.sampling else { throw ClientError.unsupportedInput(method: method) }
                 response = try await sampling(params); definition = .CreateMessageResult
@@ -305,6 +325,24 @@ actor WireValidator {
         }
         return limits
     }()
+
+    /// Compiled server-supplied schemas (`outputSchema`, `requestedSchema`), bounded.
+    private var schemas: [JSON: CompiledJSONSchema] = [:]
+
+    /// Validates `value` against a server-supplied JSON Schema with Swift-JSON's validator.
+    /// A schema that does not compile offline (for example a remote `$ref`) is an error,
+    /// never a skipped check.
+    func conforms(_ value: JSON, to schema: JSON) throws -> Bool {
+        let plan: CompiledJSONSchema
+        if let cached = schemas[schema] { plan = cached }
+        else {
+            do { plan = try SchemaCompilerAdapter.compile(schema, limits: Self.compileLimits).result }
+            catch { throw ClientError.invalidResponse("schema cannot be compiled offline: \(error)") }
+            if schemas.count >= 256 { schemas.removeAll() }
+            schemas[schema] = plan
+        }
+        return try SchemaValidatorAdapter.validate(value, against: plan, limits: Self.compileLimits).result.isValid
+    }
 
     func validate(_ value: JSON, as definition: FrozenWireDefinition) throws -> Bool {
         try plan(definition).validate(value, limits: Self.compileLimits).result

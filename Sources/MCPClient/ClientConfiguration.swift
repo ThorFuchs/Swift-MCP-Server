@@ -30,6 +30,10 @@ public struct ClientConfiguration: Sendable {
     public var maximumInputRounds: Int
     /// Bounds for parsing every message received.
     public var limits: JSONLimits
+    /// Checks `structuredContent` of successful tool results against the tool's
+    /// `outputSchema` from `tools/list` (default `true`). Elicitation content is always
+    /// checked against `requestedSchema`.
+    public var validatesStructuredContent: Bool = true
     public init(info: JSON? = nil, elicitation: Elicitation? = nil, sampling: InputHandler? = nil, roots: InputHandler? = nil,
                 extensions: [String: JSON] = [:], logLevel: String? = nil, maximumInputRounds: Int = 8, limits: JSONLimits = .balanced) {
         self.info = info; self.elicitation = elicitation; self.sampling = sampling; self.roots = roots

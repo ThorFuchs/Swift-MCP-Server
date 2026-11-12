@@ -39,7 +39,7 @@ let package = Package(
         .target(name: "MCPServiceLifecycle", dependencies: ["MCPServer", .product(name: "Logging", package: "swift-log"), .product(name: "ServiceLifecycle", package: "swift-service-lifecycle")]),
         .target(name: "MCPObservability", dependencies: ["MCPServer", "MCPProtocol", .product(name: "Logging", package: "swift-log"), .product(name: "Metrics", package: "swift-metrics"), .product(name: "ServiceContextModule", package: "swift-service-context")]),
         .target(name: "MCPServerTesting", dependencies: ["MCPServer", "MCPProtocol", "MCPClient"]),
-        .target(name: "MCPClient", dependencies: ["MCPProtocol", .product(name: "JSON", package: "swift-json")]),
+        .target(name: "MCPClient", dependencies: ["MCPProtocol", "MCPJSONSchemaAdapter", .product(name: "JSON", package: "swift-json"), .product(name: "JSONSchema", package: "swift-json")]),
         .target(name: "MCPClientStdio", dependencies: ["MCPClient", "MCPProtocol", .product(name: "JSON", package: "swift-json"),
             .product(name: "Subprocess", package: "swift-subprocess"),
             .product(name: "SystemPackage", package: "swift-system", condition: .when(platforms: [.linux]))]),
