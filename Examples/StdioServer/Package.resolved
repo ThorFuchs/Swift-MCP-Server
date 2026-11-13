@@ -92,12 +92,12 @@
       }
     },
     {
-      "identity" : "swift-sqlite",
+      "identity" : "swift-subprocess",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/ThorFuchs/Swift-SQLite.git",
+      "location" : "https://github.com/swiftlang/swift-subprocess.git",
       "state" : {
-        "revision" : "448cc8d9507f1ff6adce3eeac44568cc364ed5c3",
-        "version" : "0.2.0"
+        "revision" : "dbe21bd7dfd4ffef8c32588918542a8abfa1b54c",
+        "version" : "1.0.2"
       }
     },
     {
