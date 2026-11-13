@@ -6,6 +6,7 @@ import JSON
 import MCPProtocol
 import MCPServer
 import MCPTasks
+import MCPTasksTesting
 
 private func json(_ text: String) throws -> JSON { try WireCodec.parse(Array(text.utf8), limits: .balanced).result }
 private let alice = VerifiedPrincipal(subject: ScalarText("alice"), issuer: ScalarText("host"), resource: ScalarText("sdk"), scopes: [])
@@ -478,6 +479,44 @@ private func withListener(_ server: Server, _ data: Data, as principal: Verified
                 _ = try await waitForStatus(server, id, "completed")
                 try await Task.sleep(for: .milliseconds(50))
                 #expect(frames.methods("notifications/tasks").isEmpty)
+            }
+        }
+    }
+}
+
+@Suite struct TaskStoreCases {
+    @Test func inMemoryStorePassesTheConformanceKit() async {
+        let results = await TaskStoreConformanceKit { InMemoryTaskStore() }.runAll()
+        for result in results where result.check != .durableAcrossReopen {
+            #expect(result.outcome == .passed, "\(result.check): \(result.outcome)")
+        }
+        #expect(results.first { $0.check == .durableAcrossReopen }.map { if case .skipped = $0.outcome { true } else { false } } == true)
+    }
+
+    /// A second instance over the same store stands in for a restarted server: the first
+    /// instance's unfinished task has no running work any more.
+    @Test(arguments: [TaskRestartPolicy.failUnfinished, .keep])
+    func restartPolicyDecidesWhatHappensToUnfinishedTasks(_ policy: TaskRestartPolicy) async throws {
+        let store = InMemoryTaskStore()
+        let before = TaskRuntime(store: store)
+        let blocked = before.tool(definition: try toolDefinition("forever")) { _, _ in
+            try await Task.sleep(for: .seconds(3600)); return try text("never")
+        }
+        let first = try await makeServer(before, tools: [blocked])
+        try await withRuntime(before) {
+            let taskID = try createdTaskID(try await respond(first, call("forever", id: 1)))
+            let after = TaskRuntime(configuration: .init(restartPolicy: policy), store: store)
+            let second = try await makeServer(after, tools: [after.tool(definition: try toolDefinition("forever")) { _, _ in try text("x") }])
+            try await withRuntime(after) {
+                let response = try await respond(second, taskRequest("tasks/get", id: 2, taskID: taskID))
+                switch policy {
+                case .failUnfinished:
+                    #expect(status(response) == "failed" && result(response)?["statusMessage"]?.stringValue == "server restarted")
+                    // The failed state is final even for the instance that still runs the work.
+                    #expect(status(try await respond(first, taskRequest("tasks/get", id: 3, taskID: taskID))) == "failed")
+                case .keep:
+                    #expect(status(response) == "working")
+                }
             }
         }
     }

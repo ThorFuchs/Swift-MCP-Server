@@ -56,9 +56,39 @@ try await withThrowingTaskGroup(of: Void.self) { group in
   the newer one. Requesting `taskIds` without declaring the extension returns `-32021`.
   No progress or log notifications are sent for tasks.
 
+## Stores and restarts
+
+The runtime executes work; a `TaskStore` keeps task state (ADR-0004). Every change is a
+compare-and-set on the record's `version`, terminal records never change again, and
+expired, unknown and foreign records look the same (`nil`, `-32602`).
+
+- `InMemoryTaskStore` (default): process memory, lost on restart.
+- `SQLiteTaskStore` (product `MCPTasksSQLite`, on Swift-SQLite 0.1.0): one `STRICT` table
+  in a WAL database. `create` and `update` return after a synced `COMMIT`, so a task the
+  client has seen survives a crash. Payloads are bounded (`maximumPayloadBytes`, default
+  4 MiB); larger writes throw `TaskStoreError.payloadTooLarge`.
+
+```swift
+let store = try await SQLiteTaskStore.open(path: tasksDatabasePath)
+let tasks = TaskRuntime(store: store)                       // restartPolicy: .failUnfinished
+// … after tasks.run() returned:
+await store.close()
+```
+
+When `run()` starts it applies `TaskRuntimeConfiguration.restartPolicy` to unfinished
+stored tasks. `.failUnfinished` (default) marks them `failed` with `-32603` and
+`statusMessage: "server restarted"`, because their work did not survive. `.keep` leaves
+them alone, for a store shared with instances that still run them.
+
+New backends prove themselves with `TaskStoreConformanceKit` (product `MCPTasksTesting`):
+create/duplicate, payload round-trip, owner isolation, compare-and-set races, terminal
+immutability, bounded expiry, ordered paging of unfinished tasks and, for durable
+stores, reopening.
+
 ## Not yet implemented
 
-- Pluggable durable stores; the runtime keeps tasks in memory.
+- Resuming unfinished work from a checkpoint after a restart.
+- Shared multi-instance stores with lease-based ownership (Phase D).
 
 ## Conformance
 
