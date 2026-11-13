@@ -3,7 +3,7 @@
 Status: updated 2026-11-12 (first version 2026-11-10). Scope: protocol revision 2026-07-28
 only; no initialization-based (2025-11-25 and earlier) compatibility on either side.
 Related: [TASKS-ROADMAP.md](TASKS-ROADMAP.md), ADR-0003 (Tasks), ADR-0004 (task store),
-ADR-0005 (client).
+ADR-0005 (client), ADR-0006 (client authorization).
 
 Referee: `@modelcontextprotocol/conformance` 0.2.0-alpha.12 (latest alpha on 2026-11-11).
 
@@ -92,7 +92,7 @@ client side has nothing yet. Referee scenarios for 2026-07-28 (0.2.0-alpha.12):
 | A5 Lifecycle | Authorization server migration; token store protocol; `MCPHTTPClient` retries 401/403 once through the authorization handler | `authorization-server-migration` (1) |
 | A6 Extensions | Client credentials (JWT and basic), enterprise-managed authorization, workload identity federation (JWT bearer), DPoP with nonces | 6 extension scenarios |
 
-Decisions for an ADR before A1:
+Decisions, proposed in ADR-0006 (client authorization and DPoP):
 1. Location: `MCPClientAuthorization` in Swift-MCP-Server-HTTP next to `MCPHTTPClient`
    (authorization exists only over HTTP).
 2. Host-supplied parts: the user agent for the authorization redirect, the token store and
