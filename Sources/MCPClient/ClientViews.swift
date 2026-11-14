@@ -17,6 +17,7 @@ public struct Page<Item: Sendable>: Sendable {
     public let items: [Item]
     public let nextCursor: String?
     public let raw: JSON
+    public init(items: [Item], nextCursor: String?, raw: JSON) { self.items = items; self.nextCursor = nextCursor; self.raw = raw }
 }
 
 public struct Tool: Sendable {
@@ -44,7 +45,7 @@ public struct ToolResult: Sendable {
     public let structuredContent: JSON?
     public let isError: Bool
     public let raw: JSON
-    init(_ raw: JSON) {
+    public init(_ raw: JSON) {
         let object = raw.objectValue
         resultType = object?["resultType"]?.stringValue ?? "complete"
         content = object?["content"]?.arrayValue ?? []

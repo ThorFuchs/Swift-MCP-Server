@@ -3,6 +3,7 @@ import Foundation
 import JSON
 import MCPProtocol
 import MCPServer
+import MCPSkillsFormat
 #if canImport(CryptoKit)
 import CryptoKit
 #else

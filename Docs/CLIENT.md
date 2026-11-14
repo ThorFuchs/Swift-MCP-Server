@@ -48,11 +48,48 @@ Transports:
 - **Concurrency.** `Client` is an actor; calls run concurrently on the caller's tasks and
   cancelling a call cancels its exchange. No detached tasks, no global state.
 
+## Extensions
+
+### Tasks (`MCPTasksClient`)
+
+```swift
+let (key, value) = TasksClient.declaration
+let client = Client(transport: transport, configuration: .init(elicitation: elicitation, extensions: [key: value]))
+let tasks = TasksClient(client: client)
+let result = try await tasks.callToolToCompletion("build_report", arguments: arguments)
+```
+
+- `callTool` returns `.completed(ToolResult)` or `.task(TaskSnapshot)`.
+- `wait(for:)` polls `tasks/get` at the server's `pollIntervalMs` (clamped to
+  `pollingBounds`), answers each input request key once with the client's handlers through
+  `tasks/update`, and returns the terminal state. Cancelling the wait does not cancel the
+  task; `cancel(_:)` sends `tasks/cancel`.
+- `follow(_:)` uses `subscriptions/listen` with `taskIds` instead of polling and returns
+  the final state of every task the server agreed to report.
+- Requests fail with `TasksClientError.extensionNotDeclared` unless the configuration
+  declares the extension.
+
+### Skills (`MCPSkillsClient`)
+
+```swift
+let skills = SkillsClient(client: client)
+let entry = try await skills.list().items.first { $0.name == "pdf-processing" }!
+let loaded = try await skills.load(entry)                  // fetches and verifies SKILL.md
+let forms = try await skills.file("skill://pdf-processing/references/FORMS.md", of: loaded)
+```
+
+- Nothing is fetched ahead of need: `list` and `get` return entries only.
+- Every fetched file must be listed in the entry and match its `size` and `sha256:`
+  digest; `SKILL.md`'s frontmatter is parsed with the server's strict parser and compared
+  field by field with the entry. Any mismatch throws `SkillVerificationError` and the
+  content is not returned.
+
 ## Conformance
 
 The client fixture in Swift-MCP-Server-HTTP passes all 8 non-authorization client
-scenarios of `@modelcontextprotocol/conformance` 0.2.0-alpha.12 for 2026-07-28 (64 checks).
+scenarios of `@modelcontextprotocol/conformance` 0.2.0-alpha.12 for 2026-07-28 (64 checks)
+and the 4 Skills client scenarios (`sep-2640-client-*`).
 
 ## Not yet implemented
 
-- OAuth (`MCPClientAuthorization`), Tasks and Skills client helpers.
+- OAuth (`MCPClientAuthorization`).
