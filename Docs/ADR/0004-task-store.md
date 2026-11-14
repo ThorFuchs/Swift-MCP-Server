@@ -1,6 +1,6 @@
 # ADR-0004: Durable task store protocol and backends
 
-- Status: **Proposed** (2026-11-10)
+- Status: **Accepted** (2026-11-12); implemented in `MCPTasks`, `MCPTasksTesting`, `MCPTasksSQLite`
 - Builds on ADR-0003 (`MCPTasks`)
 
 ## Context
@@ -58,3 +58,16 @@ Backends reviewed (2026-11-10):
 - Open choice for `MCPTasksSQLite`: system SQLite (smaller, OS-managed version) versus a
   vendored amalgamation (pinned version, identical behavior everywhere). Default
   proposal: system SQLite on Apple platforms, amalgamation on Linux.
+
+## Implementation notes (2026-11-12)
+
+- The protocol is narrower than sketched above: `create`, `load`, a single compare-and-set
+  `update` of the whole record (it covers transitions, input requests and answers, and the
+  cancellation flag), `count`, bounded `expire(now:limit:)` and paged
+  `unfinished(after:limit:now:)`. Exactly-once input keys follow from `nextInput` and CAS.
+- `MCPTasksSQLite` uses Swift-SQLite 0.1.0 (`SQLiteSwift`): system SQLite on Apple
+  platforms, the pinned amalgamation on Linux, which settles the open choice above.
+- Unknown commit outcomes surface as `TaskStoreError.outcomeUnknown`; the runtime resolves
+  them by reading the record back.
+- Resumers with checkpoints are not implemented yet; the restart policy is
+  `.failUnfinished` or `.keep`.
