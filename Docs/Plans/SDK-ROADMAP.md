@@ -1,6 +1,6 @@
 # SDK roadmap: complete server SDK and a stable client
 
-Status: updated 2026-11-12 (first version 2026-11-10). Scope: protocol revision 2026-07-28
+Status: updated 2026-11-14 (first version 2026-11-10). Scope: protocol revision 2026-07-28
 only; no initialization-based (2025-11-25 and earlier) compatibility on either side.
 Related: [TASKS-ROADMAP.md](TASKS-ROADMAP.md), ADR-0003 (Tasks), ADR-0004 (task store),
 ADR-0005 (client), ADR-0006 (client authorization).
@@ -17,18 +17,21 @@ Referee: `@modelcontextprotocol/conformance` 0.2.0-alpha.12 (latest alpha on 202
 | Streamable HTTP, standard and custom headers, protected resource metadata, bearer authorization | done (Swift-MCP-Server-HTTP) | referee, HTTP tests |
 | Tasks phase A: 10 official scenarios | done (#6, #8) | 10/10, gated in HTTP CI (HTTP #2) |
 | Tasks phase B: `notifications/tasks` over listen | done (#10) | 4 tests, full regression |
-| Tasks phase C: `TaskStore`, `TaskStoreConformanceKit`, `MCPTasksSQLite`, restart policy | in review (#17) | kit passes for in-memory and SQLite (including reopen); restart policy tests |
+| Tasks phase C: `TaskStore`, `TaskStoreConformanceKit`, `MCPTasksSQLite`, restart policy | done (#17, Swift-SQLite 0.2.0) | kit passes for in-memory and SQLite (including reopen); restart policy tests |
 | S2 Skills (`MCPSkills`, SEP-2640) | done (#11, HTTP #2) | 9 tests, referee 45/45 checks |
 | CI gate for implemented extensions (13 scenarios) | done (HTTP #2) | gate fails when results are missing |
+| S3 MCP Apps helpers (`MCPApps`) | done (#20) | 4 tests, `Docs/APPS.md` |
 
 ### Client
 
 | Area | State | Evidence |
 |---|---|---|
-| C1 `MCPClient`: discover, tools, resources, prompts, complete, listen, generic requests, MRTR driver, schema validation, typed errors | in review (#16) | 18 tests in 6 suites |
-| C2 transports: `LoopbackTransport`, `MCPClientStdio` (swift-subprocess), `MCPHTTPClient` (AsyncHTTPClient, JSON and SSE) | stdio in review (#16); HTTP on `feat/http-client`, PR after #16 | stdio tests against a real server process; HTTP end-to-end tests against `MCPHTTP` |
+| C1 `MCPClient`: discover, tools, resources, prompts, complete, listen, generic requests, MRTR driver, schema validation, typed errors | done (#16; structured-content and elicitation validation with Swift-JSON in #19) | client tests, referee |
+| C2 transports: `LoopbackTransport`, `MCPClientStdio` (swift-subprocess), `MCPHTTPClient` (AsyncHTTPClient, JSON and SSE) | done (#16, HTTP #4) | stdio tests against a real server process; HTTP end-to-end tests against `MCPHTTP` |
 | `x-mcp-header` mirroring and invalid-tool rejection | done | spec encoding examples, referee |
-| Client conformance | **8/8 non-authorization scenarios, 64/64 checks** | `Scripts/client-conformance.sh` (CI gate on the branch) |
+| C4 Tasks client (`MCPTasksClient`) and Skills client (`MCPSkillsClient`) | done (#19, HTTP #5) | client tests, 4 Skills scenarios |
+| C3 client authorization (`MCPClientAuthorization`) | A1–A3 in review (HTTP #6); A4 on `feat/client-authorization-a4`; A5–A6 open | 24 `auth/*` scenarios pass locally |
+| Client conformance | **12/12 scenarios on `main`; 36/36 with A1–A4** (24 `auth/*`) | `Scripts/client-conformance.sh` (CI gate) |
 
 ## 2. Complete server SDK (target: 1.0)
 
@@ -37,7 +40,6 @@ Referee: `@modelcontextprotocol/conformance` 0.2.0-alpha.12 (latest alpha on 202
 | ID | Item | Estimate | Exit criterion |
 |---|---|---|---|
 | T-B2 | Tasks phase B remainder: compiler-enforced single completion (`~Copyable` token), typed `TaskFailure`, DocC article, Explorer example | 1–2 days | API review |
-| S3 | MCP Apps helpers (`ui://` resources, `text/html;profile=mcp-app`, tool `_meta` UI reference, client MIME negotiation) | 2–3 days | example plus tests |
 | S5 | Resource-server DPoP: decide whether `MCPHTTPAuthorization` validates DPoP-bound tokens (ext-auth) | 1 day investigation | ADR |
 | S2b | Skills: dynamic skills (`"resources": "dynamic"`) and catalogs that change at runtime | 1–2 days | tests |
 | S4 | Server Cards (`<endpoint>/server-card`) once the extension reaches Beta | 2–3 days | wait |
@@ -64,7 +66,6 @@ loopback. Authorization stays outside the stable surface until C3.
 
 | ID | Item | Estimate |
 |---|---|---|
-| CS1 | PRs for `feat/client-core` and HTTP `feat/http-client` (merge `main`, full regression, client conformance in CI) | ½ day |
 | CS2 | Test gaps: listen over stdio, resources and prompts over HTTP and stdio, limits (oversized messages, too many pending requests), server restart on stdio, invalid server output on every method | 1–2 days |
 | CS3 | API review: typed views versus raw JSON, handler signatures, error cases, `Sendable` and cancellation contracts; DocC and an example client | 1–2 days |
 | CS4 | Linux: stdio transport and client tests in the Linux container | ½ day |
@@ -102,13 +103,18 @@ Decisions, proposed in ADR-0006 (client authorization and DPoP):
 
 Order inside C3: ADR, A1–A3 (the common interactive case), then A4–A6.
 
+Progress (2026-11-14): ADR-0006 accepted. A1–A3 pass all 17 of their scenarios and the three
+basic scope scenarios (HTTP #6); A4 adds step-up with scope union and a step-up limit,
+`offline_access` and refresh tokens, and passes `scope-step-up`, `scope-retry-limit` and both
+`offline-access-*` scenarios. Next: A5 (authorization server migration, host `TokenStore`), then A6.
+
 ## 4. Order
 
-1. Merge #16 (client) and #17 (Tasks phase C); then the HTTP client PR.
-2. CS2–CS5 and tag the client's first stable surface (0.x).
-3. R3 and R4 (reliable CI), T-B2.
-4. C4 (Tasks and Skills client), then C3 (authorization, largest block).
-5. S3, S5, S2b; S4 when Server Cards reach Beta.
+1. Done: #16 (client), #17 (Tasks phase C), HTTP #4 (HTTP client), C4 (#19, HTTP #5), S3 (#20).
+2. C3: merge A1–A3 (HTTP #6) and A4, then A5 and A6 (with S5).
+3. CS2–CS5 and tag the client's first stable surface (0.x).
+4. R3 and R4 (reliable CI), T-B2.
+5. S5, S2b; S4 when Server Cards reach Beta.
 6. R1, R2, R5, R6 and the 1.0 release of the server SDK.
 
 ## 5. Decisions taken since the first version

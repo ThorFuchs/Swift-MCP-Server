@@ -1,6 +1,6 @@
 # ADR-0006: Client authorization (`MCPClientAuthorization`) and DPoP
 
-- Status: **Proposed** (2026-11-12)
+- Status: **Accepted** (proposed 2026-11-12, accepted 2026-11-14 with A1–A3 in Swift-MCP-Server-HTTP #6)
 - Builds on ADR-0005 (client); covers roadmap C3 (slices A1–A6) and S5 (resource-server DPoP)
 
 ## Context
@@ -39,7 +39,8 @@ signatures we need).
    `HTTPClientAuthorizing` value. Before each request it supplies headers (`Authorization`
    and, with DPoP, `DPoP`); on `401`, `403 insufficient_scope` or `use_dpop_nonce` it
    decides whether to retry. The transport retries a request at most once per
-   authorization step and never retries a request whose body it already streamed.
+   authorization step (once after `401`, once after `403`) and never retries a request
+   whose body it already streamed.
 3. **`OAuthClient` actor** owns the flow: discovery (A1), client identity (A2), code flow
    (A3), scopes and refresh (A4), migration (A5). Metadata is cached per resource with the
    server's cache directives and bounded size; refresh is single-flight per token.
@@ -79,3 +80,19 @@ Order: A1–A3 first (the interactive authorization code case), then A4–A6.
 - ES256-only JWS keeps the cryptography surface small. Servers that require RS256 client
   assertions are not supported until a host asks for it.
 - The resource server can require DPoP-bound tokens with the same JWS code the client uses.
+
+## Implementation notes (2026-11-14)
+
+- A1–A3 (Swift-MCP-Server-HTTP #6):
+  - The client checks that the published `resource` covers the endpoint: same origin, and a
+    parent path on a segment boundary. It sends the `resource` unchanged.
+  - Authorization server metadata must offer PKCE `S256`.
+  - The client tries identities in this order: pre-registered, client ID metadata document,
+    dynamic registration with `application_type`.
+- A4:
+  - A step-up asks for the union of the scopes already requested and the challenged ones. It
+    only runs when the challenge adds a scope, and at most `maximumStepUps` times in a row (3).
+  - `offline_access` is requested when the server lists it.
+  - A rejected token is refreshed before the user is asked again.
+  - Tokens are refreshed 30 seconds before expiry.
+- The token store is still in memory; the host `TokenStore` comes with A5.
