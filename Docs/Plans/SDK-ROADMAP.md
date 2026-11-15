@@ -1,6 +1,6 @@
 # SDK roadmap: complete server SDK and a stable client
 
-Status: updated 2026-11-14 (first version 2026-11-10). Scope: protocol revision 2026-07-28
+Status: updated 2026-11-15 (first version 2026-11-10). Scope: protocol revision 2026-07-28
 only; no initialization-based (2025-11-25 and earlier) compatibility on either side.
 Related: [TASKS-ROADMAP.md](TASKS-ROADMAP.md), ADR-0003 (Tasks), ADR-0004 (task store),
 ADR-0005 (client), ADR-0006 (client authorization).
@@ -30,8 +30,8 @@ Referee: `@modelcontextprotocol/conformance` 0.2.0-alpha.12 (latest alpha on 202
 | C2 transports: `LoopbackTransport`, `MCPClientStdio` (swift-subprocess), `MCPHTTPClient` (AsyncHTTPClient, JSON and SSE) | done (#16, HTTP #4) | stdio tests against a real server process; HTTP end-to-end tests against `MCPHTTP` |
 | `x-mcp-header` mirroring and invalid-tool rejection | done | spec encoding examples, referee |
 | C4 Tasks client (`MCPTasksClient`) and Skills client (`MCPSkillsClient`) | done (#19, HTTP #5) | client tests, 4 Skills scenarios |
-| C3 client authorization (`MCPClientAuthorization`) | A1–A3 in review (HTTP #6); A4 on `feat/client-authorization-a4`; A5–A6 open | 24 `auth/*` scenarios pass locally |
-| Client conformance | **12/12 scenarios on `main`; 36/36 with A1–A4** (24 `auth/*`) | `Scripts/client-conformance.sh` (CI gate) |
+| C3 client authorization (`MCPClientAuthorization`) | A1–A4 done (HTTP #6, #7); A5 on `feat/client-authorization-a5`; A6 open | 24 `auth/*` scenarios in the CI gate |
+| Client conformance | **36/36 scenarios on `main`** (24 `auth/*`) | `Scripts/client-conformance.sh` (CI gate) |
 
 ## 2. Complete server SDK (target: 1.0)
 
@@ -51,8 +51,8 @@ Referee: `@modelcontextprotocol/conformance` 0.2.0-alpha.12 (latest alpha on 202
 |---|---|---|
 | R1 | SwiftNIO early-EOF fix for macOS 27 ([apple/swift-nio#3783](https://github.com/apple/swift-nio/pull/3783), open) | Swift-MCP-Server-HTTP cannot release on a SwiftNIO without it |
 | R2 | Release build of the HTTP fixture fails to link (`NIOHTTPServer.Connection.HTTPProtocol` metadata, swift-http-server) | conformance runs only in debug (slow, 90 s scenario timeout) |
-| R3 | Timing-dependent tests: one Explorer test (`deadlineOfPartialResponseJoinsTask`), `realStdioExampleFragments…` under load, and `eofCancellationAndBrokenOutputSettle` on Linux (a closed output can surface as `CoreFailure.eventOverflow` from the event channel before the transport reports `StdioFailure.brokenPipe`; the transport should report the pipe failure first) | flaky CI hides real failures |
-| R4 | CI access to the private core and HTTP repositories (the self-hosted runner only has cached checkouts; macOS cleared them once already) | every core change needs a manual cache refresh until a read-only key exists or the repositories are public; Swift-SQLite is public since 2026-11-12 |
+| R3 | Timing-dependent tests: one Explorer test (`deadlineOfPartialResponseJoinsTask`), `realStdioExampleFragments…` under load, the HTTP listener tests `nativeHTTPStalledWriterClosesAndReleasesTerminalOwnership` and `boundReadinessClosesAcceptedSubscriptionChannelsAndListener(tls:)` under load (2026-11-14), and `eofCancellationAndBrokenOutputSettle` on Linux (a closed output can surface as `CoreFailure.eventOverflow` from the event channel before the transport reports `StdioFailure.brokenPipe`; the transport should report the pipe failure first) | flaky CI hides real failures |
+| R4 | ~~CI access to the private core repository~~ done: HTTP CI fetches it with a read-only token through job-scoped git configuration (HTTP #8) | — |
 | R5 | Linux CI for Swift-MCP-Server-HTTP (only macOS 27 today) | Linux is a supported platform |
 | R6 | Public API review, DocC for every product, semantic-versioning policy, `1.0.0` tag | stable promise |
 
@@ -110,8 +110,8 @@ basic scope scenarios (HTTP #6); A4 adds step-up with scope union and a step-up 
 
 ## 4. Order
 
-1. Done: #16 (client), #17 (Tasks phase C), HTTP #4 (HTTP client), C4 (#19, HTTP #5), S3 (#20).
-2. C3: merge A1–A3 (HTTP #6) and A4, then A5 and A6 (with S5).
+1. Done: #16 (client), #17 (Tasks phase C), HTTP #4 (HTTP client), C4 (#19, HTTP #5), S3 (#20), R4 (HTTP #8).
+2. C3: A1–A4 merged (HTTP #6, #7); A5 next, then A6 (with S5).
 3. CS2–CS5 and tag the client's first stable surface (0.x).
 4. R3 and R4 (reliable CI), T-B2.
 5. S5, S2b; S4 when Server Cards reach Beta.
