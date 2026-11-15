@@ -39,7 +39,7 @@ private func ready(_ client: Client) async throws {
             try await ready(client)
             let acknowledged = Mutex(false)
             let listening = Task {
-                try await client.listen(try json(#"{"toolsListChanged":true}"#)) { event in
+                try await client.listen(SubscriptionFilter(toolsListChanged: true)) { event in
                     if case .acknowledged = event { acknowledged.withLock { $0 = true } }
                 }
             }

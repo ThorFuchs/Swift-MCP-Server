@@ -82,7 +82,7 @@ private func call(_ structured: String?, isError: Bool = false) -> String {
         }
         let content = Mutex(#"{"name":""}"#)
         let client = Client(transport: server, configuration: .init(elicitation: .init { _ in
-            try json(#"{"action":"accept","content":\#(content.withLock { $0 })}"#)
+            .accept(content: try json(content.withLock { $0 }).objectValue)
         }))
         await #expect(throws: ClientError.self) { _ = try await client.callTool("ask") }
         #expect(server.requests.count == 1)   // the invalid answer was never sent
@@ -93,7 +93,7 @@ private func call(_ structured: String?, isError: Bool = false) -> String {
         #expect(sent?.objectValue?["content"]?.objectValue?["name"]?.stringValue == "Ada")
 
         // Declined elicitations carry no content to check.
-        let declining = Client(transport: server, configuration: .init(elicitation: .init { _ in try json(#"{"action":"decline"}"#) }))
+        let declining = Client(transport: server, configuration: .init(elicitation: .init { _ in .decline }))
         _ = try await declining.callTool("ask")
     }
 }

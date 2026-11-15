@@ -10,12 +10,17 @@ session: every request carries the protocol version and client capabilities in
 ```swift
 let client = Client(transport: HTTPClientTransport(endpoint: url),       // MCPHTTPClient
     configuration: .init(info: clientInfo,
-        elicitation: .init { params in try await askUser(params) },      // answers elicitation/create
-        roots: { _ in try rootsJSON() }))
-let server = try await client.discover()
+        elicitation: .init { request in try await askUser(request) },    // -> .accept(content:), .decline, .cancel
+        sampling: { request in try .text(try await model(request), model: "local") },
+        roots: { [Root(uri: "file:///Users/me/project", name: "project")] }))
+let server = try await client.discover()                                 // server.serverInfo?.name
 let tools = try await client.listTools()
 let result = try await client.callTool("search", arguments: arguments) { progress in show(progress) }
-try await client.listen(filters) { event in handle(event) }             // subscriptions/listen
+for block in result.content { if case .text(let text) = block { print(text) } }
+let contents = try await client.readResource("file:///readme")           // [.text(...)] or [.blob(...)]
+let prompt = try await client.getPrompt("review", arguments: ["code": source])
+let options = try await client.complete(.prompt(name: "review"), argument: "language", value: "sw")
+try await client.listen(SubscriptionFilter(toolsListChanged: true)) { event in handle(event) }
 ```
 
 Transports:
@@ -31,11 +36,25 @@ Transports:
 
 ## Behavior
 
-- **MRTR.** An `InputRequiredResult` is answered by the configured handlers
-  (elicitation, sampling, roots); their results are validated, then the request is resent
-  with `inputResponses` and the opaque `requestState`, up to `maximumInputRounds`.
-  Declared capabilities follow from the handlers that are set. Input no handler answers is
-  `ClientError.unsupportedInput`, never guessed.
+- **MRTR.** An `InputRequiredResult` is answered by the configured handlers. They are typed:
+  - elicitation: `ElicitationRequest` → `ElicitationResponse`;
+  - sampling: `SamplingRequest` → `SamplingResponse`;
+  - roots: `[Root]`;
+  - other methods: `additionalInputHandlers`, JSON → JSON.
+
+  Their results are validated against the schema, and accepted elicitation content against
+  `requestedSchema`. Then the request is resent with `inputResponses` and the opaque
+  `requestState`, up to `maximumInputRounds`. Declared capabilities follow from the handlers
+  that are set; an elicitation in a mode that was not declared is refused. Input that no
+  handler answers is `ClientError.unsupportedInput`, never guessed.
+- **Typed results.**
+  - `ToolResult.content` and prompt messages are `[Content]`: text, image, audio, resource
+    link, embedded resource, or `.unknown(JSON)` for types the SDK does not model and for
+    payloads that do not decode.
+  - `readResource` returns `[ResourceContents]` with decoded blobs.
+  - `getPrompt` returns `PromptResult`, `complete` returns `Completion`, and
+    `listResourceTemplates` returns `Page<ResourceTemplate>`.
+  - Log levels are `LoggingLevel`.
 - **Tool headers.** On Streamable HTTP, `x-mcp-header` parameters are mirrored into
   `Mcp-Param-*` headers with the specification's encoding; tools with invalid annotations
   are dropped from `tools/list` and listed in `rejectedTools`.
@@ -43,8 +62,9 @@ Transports:
   never dereferenced over the network.
 - **Compatibility.** A result without `resultType` is `complete`. `-32022` is retried
   once when the server lists 2026-07-28, otherwise it is `ClientError.unsupportedProtocol`.
-- **Errors.** JSON-RPC errors are `ClientError.server(code:message:data:)`;
-  `requiredExtensions` reads the extensions a `-32021` names.
+- **Errors.** JSON-RPC errors are `ClientError.server(code:message:data:)`. `ClientError` is
+  `Equatable`, and `ClientError.Code` names the codes (for example `.methodNotFound`,
+  `.missingRequiredCapabilities`). `requiredExtensions` reads the extensions a `-32021` names.
 - **Concurrency.** `Client` is an actor; calls run concurrently on the caller's tasks and
   cancelling a call cancels its exchange. No detached tasks, no global state.
 

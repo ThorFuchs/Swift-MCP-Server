@@ -46,7 +46,7 @@ private final class Counter: Sendable {
 private func tasksClient(_ server: Server, elicitations: Counter = Counter()) -> TasksClient {
     let (key, value) = TasksClient.declaration
     let client = Client(transport: LoopbackTransport(server: server, principal: user), configuration: .init(
-        elicitation: .init { _ in elicitations.increment(); return try json(#"{"action":"accept","content":{}}"#) },
+        elicitation: .init { _ in elicitations.increment(); return .accept(content: try JSONObject()) },
         extensions: [key: value]))
     return TasksClient(client: client, pollingBounds: .milliseconds(5)...(.milliseconds(50)))
 }

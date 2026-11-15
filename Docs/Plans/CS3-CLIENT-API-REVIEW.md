@@ -1,6 +1,6 @@
 # CS3: client API review before the first stable tag
 
-Status: proposed 2026-11-15. Scope: the public API of `MCPClient`, `MCPClientStdio`,
+Status: accepted 2026-11-15 (all of A1–A11); implemented on `feat/client-api-cs3`. Scope: the public API of `MCPClient`, `MCPClientStdio`,
 `MCPTasksClient`, `MCPSkillsClient` (core) and `MCPHTTPClient`, `MCPClientAuthorization` (HTTP
 repository) as on `main` after #25 and HTTP #9. Goal: decide what changes before the client's
 first stable 0.x tag. Changes after the tag must be additive.

@@ -39,7 +39,7 @@ private struct RawTransport: ClientTransport {
     ])
     func invalidResultsAreRejectedForEveryMethod(_ method: String, _ result: String) async throws {
         let client = Client(transport: FixedResultTransport(result: result), configuration: .init(
-            elicitation: .init { _ in try json(#"{"action":"cancel"}"#) }))
+            elicitation: .init { _ in .cancel }))
         await #expect(throws: ClientError.self) {
             switch method {
             case "tools/list": _ = try await client.listTools()

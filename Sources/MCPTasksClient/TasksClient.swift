@@ -160,7 +160,7 @@ public struct TasksClient: Sendable {
     /// agreed and are missing from the result.
     public func follow(_ taskIds: [String], onUpdate: (@Sendable (TaskSnapshot) async -> Void)? = nil) async throws -> [String: TaskSnapshot] {
         try requireDeclaration()
-        let filter = JSON.object(try JSONObject(members: [JSONMember("taskIds", value: .array(taskIds.map(JSON.string)))]))
+        let filter = SubscriptionFilter(extensions: ["taskIds": .array(taskIds.map(JSON.string))])
         let state = FollowState()
         let (done, signal) = AsyncStream.makeStream(of: Void.self, bufferingPolicy: .bufferingNewest(1))
         // The listen call runs as a child task; once every agreed task is terminal the
