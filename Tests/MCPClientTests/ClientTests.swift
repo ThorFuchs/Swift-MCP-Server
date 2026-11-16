@@ -34,6 +34,14 @@ private func makeServer() async throws -> Server {
             guard let reply = round.responses["roots"] else { return .inputRequired(.init(inputs: [roots.identifier], state: .null)) }
             return .complete(try text("\(reply.objectValue?["roots"]?.arrayValue?.count ?? 0) roots"))
         })
+    let question = InputDescriptor(identifier: ScalarText("answer"), request: try json(#"""
+        {"method":"sampling/createMessage","params":{"messages":[{"role":"user","content":{"type":"text","text":"2+2?"}}],"maxTokens":16}}
+        """#))
+    let sampled = ToolRegistration(definition: try json(#"{"name":"sampled","inputSchema":{"type":"object"}}"#),
+        rounds: MultiRoundProvider(version: ScalarText("v1"), inputs: [question], replay: .integrityOnly) { _, round, _ in
+            guard let reply = round.responses["answer"] else { return .inputRequired(.init(inputs: [question.identifier], state: .null)) }
+            return .complete(try text(reply.objectValue?["content"]?.objectValue?["text"]?.stringValue ?? "?"))
+        })
     let slow = ToolRegistration(definition: try json(#"{"name":"slow","inputSchema":{"type":"object"}}"#)) { _, context in
         try await context.progress(JSONNumber(integer: 1), total: JSONNumber(integer: 2), message: "half")
         return try text("done")
@@ -42,7 +50,7 @@ private func makeServer() async throws -> Server {
         try json(#"{"resultType":"complete","contents":[{"uri":"file:///readme","mimeType":"text/plain","text":"Read me"}]}"#)
     }
     return try await Server.make(info: json(#"{"name":"client-tests","version":"1"}"#),
-        catalog: ServerCatalog(tools: [echo, greet, rooted, slow], resources: [readme], listChanged: [.listTools]),
+        catalog: ServerCatalog(tools: [echo, greet, rooted, sampled, slow], resources: [readme], listChanged: [.listTools]),
         cursors: CursorProtector(keys: [.init(identifier: ScalarText("cursor"), material: Data(repeating: 2, count: 32))], active: ScalarText("cursor"), clock: { 1000 }),
         continuations: RequestStateProtector(keys: [.init(identifier: ScalarText("state"), material: Data(repeating: 3, count: 32))], active: ScalarText("state"),
             namespace: ScalarText("client-tests"), epoch: ScalarText("v1"), clock: { 1000 }))
@@ -71,7 +79,7 @@ private struct InputRequiringTransport: ClientTransport {
         let description = try await client.discover()
         #expect(description.supportedVersions.contains("2026-07-28") && description.capabilities["tools"] != nil)
         let tools = try await client.listTools()
-        #expect(tools.items.map(\.name).sorted() == ["echo", "greet", "rooted", "slow"])
+        #expect(tools.items.map(\.name).sorted() == ["echo", "greet", "rooted", "sampled", "slow"])
         // Schemas pass through untouched, including keywords the SDK does not model.
         let echo = try #require(tools.items.first { $0.name == "echo" })
         #expect(echo.inputSchema.objectValue?["$defs"]?.objectValue?["keep"] != nil && echo.description == "Echo")
@@ -79,22 +87,27 @@ private struct InputRequiringTransport: ClientTransport {
         #expect(result.text == "hi" && !result.isError && result.resultType == "complete")
         let resources = try await client.listResources()
         #expect(resources.items.map(\.uri) == ["file:///readme"])
-        #expect(try await client.readResource("file:///readme").first?.objectValue?["text"]?.stringValue == "Read me")
+        #expect(try await client.readResource("file:///readme").first.map { String(decoding: $0.bytes, as: UTF8.self) } == "Read me")
     }
 
     @Test func inputRoundsAreAnsweredByTheConfiguredHandlers() async throws {
         let server = try await makeServer()
         let asked = Mutex<[String]>([])
         let configuration = ClientConfiguration(
-            elicitation: .init { params in
-                asked.withLock { $0.append(params.objectValue?["message"]?.stringValue ?? "") }
-                return try json(#"{"action":"accept","content":{"name":"Ada"}}"#)
+            elicitation: .init { request in
+                asked.withLock { $0.append(request.message) }
+                return .accept(content: try json(#"{"name":"Ada"}"#).objectValue)
             },
-            roots: { _ in try json(#"{"roots":[{"uri":"file:///a"},{"uri":"file:///b"}]}"#) })
+            sampling: { request in
+                asked.withLock { $0.append("\(request.messages.first?.text ?? "") max \(request.maxTokens)") }
+                return try .text("4", model: "test-model")
+            },
+            roots: { [Root(uri: "file:///a"), Root(uri: "file:///b", name: "b")] })
         let client = client(server, configuration)
         #expect(try await client.callTool("greet").text == "Hello, Ada!")
-        #expect(asked.withLock { $0 } == ["Your name?"])
         #expect(try await client.callTool("rooted").text == "2 roots")
+        #expect(try await client.callTool("sampled").text == "4")
+        #expect(asked.withLock { $0 } == ["Your name?", "2+2? max 16"])
     }
 
     @Test func missingHandlersAndServerErrorsSurfaceAsTypedErrors() async throws {
@@ -112,9 +125,9 @@ private struct InputRequiringTransport: ClientTransport {
         catch ClientError.unsupportedInput(let method) { #expect(method == "sampling/createMessage") }
         do { _ = try await client.callTool("missing"); Issue.record("expected a server error") }
         catch ClientError.server(let code, _, _) { #expect(code == -32602) }
-        // A handler that answers with an invalid result is rejected before it is sent.
+        // A handler whose content does not match the requested schema is rejected before it is sent.
         let broken = Client(transport: LoopbackTransport(server: server, principal: user),
-                            configuration: .init(elicitation: .init { _ in try json(#"{"action":"maybe"}"#) }))
+                            configuration: .init(elicitation: .init { _ in .accept(content: try json(#"{"name":5}"#).objectValue) }))
         await #expect(throws: ClientError.self) { _ = try await broken.callTool("greet") }
     }
 
@@ -134,7 +147,7 @@ private struct InputRequiringTransport: ClientTransport {
         let events = Mutex<[String]>([])
         try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
-                try await client.listen(try json(#"{"toolsListChanged":true,"promptsListChanged":true}"#)) { event in
+                try await client.listen(SubscriptionFilter(toolsListChanged: true, promptsListChanged: true)) { event in
                     switch event {
                     case .acknowledged(let agreed):
                         events.withLock { $0.append("ack:\(agreed.objectValue?["toolsListChanged"]?.booleanValue == true)") }
@@ -162,7 +175,7 @@ private struct InputRequiringTransport: ClientTransport {
     @Test func cancellingACallEndsItsExchange() async throws {
         let server = try await makeServer()
         let client = client(server, .init(elicitation: .init { _ in
-            try await Task.sleep(for: .seconds(60)); return try json(#"{"action":"cancel"}"#)
+            try await Task.sleep(for: .seconds(60)); return .cancel
         }))
         let call = Task { try await client.callTool("greet") }
         try await Task.sleep(for: .milliseconds(200))

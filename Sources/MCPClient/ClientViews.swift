@@ -7,7 +7,7 @@ public struct ServerDescription: Sendable {
     public let supportedVersions: [String]
     public let capabilities: JSONObject
     public let instructions: String?
-    public let serverInfo: JSON?
+    public let serverInfo: Implementation?
     public let raw: JSON
     /// The server's settings for an extension, if it declares it.
     public func extensionSettings(_ identifier: String) -> JSON? { capabilities["extensions"]?.objectValue?[identifier] }
@@ -41,21 +41,21 @@ public struct Tool: Sendable {
 /// `resultType: "task"`), which `resultType` names and `raw` carries.
 public struct ToolResult: Sendable {
     public let resultType: String
-    public let content: [JSON]
+    public let content: [Content]
     public let structuredContent: JSON?
     public let isError: Bool
     public let raw: JSON
     public init(_ raw: JSON) {
         let object = raw.objectValue
         resultType = object?["resultType"]?.stringValue ?? "complete"
-        content = object?["content"]?.arrayValue ?? []
+        content = (object?["content"]?.arrayValue ?? []).map(Content.init)
         structuredContent = object?["structuredContent"]
         isError = object?["isError"]?.booleanValue ?? false
         self.raw = raw
     }
     /// Concatenated text of all text content blocks.
     public var text: String {
-        content.compactMap { $0.objectValue?["type"]?.stringValue == "text" ? $0.objectValue?["text"]?.stringValue : nil }.joined()
+        content.compactMap(\.text).joined()
     }
 }
 
@@ -99,7 +99,7 @@ public struct Progress: Sendable {
 
 /// `notifications/message` for one call.
 public struct LogMessage: Sendable {
-    public let level: String
+    public let level: LoggingLevel
     public let logger: String?
     public let data: JSON
 }

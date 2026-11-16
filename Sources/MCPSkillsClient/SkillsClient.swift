@@ -130,13 +130,8 @@ public struct SkillsClient: Sendable {
     private func fetch(_ uri: String, of entry: SkillEntry) async throws -> [UInt8] {
         guard let expected = entry.files.first(where: { $0.uri == uri }) else { throw SkillVerificationError.notListed(uri: uri) }
         let contents = try await client.readResource(uri)
-        guard let content = contents.lazy.compactMap(\.objectValue).first(where: { $0["uri"]?.stringValue == uri }) else {
-            throw SkillVerificationError.missingContent(uri: uri)
-        }
-        let bytes: [UInt8]
-        if let text = content["text"]?.stringValue { bytes = Array(text.utf8) }
-        else if let blob = content["blob"]?.stringValue, let data = Data(base64Encoded: blob) { bytes = Array(data) }
-        else { throw SkillVerificationError.missingContent(uri: uri) }
+        guard let content = contents.first(where: { $0.uri == uri }) else { throw SkillVerificationError.missingContent(uri: uri) }
+        let bytes = content.bytes
         try Self.verify(bytes, against: expected)
         return bytes
     }

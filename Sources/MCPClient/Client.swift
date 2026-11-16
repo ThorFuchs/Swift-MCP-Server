@@ -26,7 +26,7 @@ public actor Client {
     /// `outputSchema` of every tool from the latest `tools/list` pages, by tool name.
     private var outputSchemas: [String: JSON] = [:]
     /// Tools dropped from `tools/list` because of invalid `x-mcp-header` annotations.
-    public private(set) var rejectedTools: [(name: String, reason: String)] = []
+    public private(set) var rejectedTools: [RejectedTool] = []
 
     public init(transport: any ClientTransport, configuration: ClientConfiguration = .init()) {
         self.transport = transport; self.configuration = configuration
@@ -43,7 +43,7 @@ public actor Client {
         let empty = try JSONObject()
         return ServerDescription(supportedVersions: versions, capabilities: object["capabilities"]?.objectValue ?? empty,
             instructions: object["instructions"]?.stringValue,
-            serverInfo: object["_meta"]?.objectValue?["io.modelcontextprotocol/serverInfo"], raw: result)
+            serverInfo: Implementation(object["_meta"]?.objectValue?["io.modelcontextprotocol/serverInfo"]), raw: result)
     }
 
     // MARK: Tools, resources, prompts
@@ -57,7 +57,7 @@ public actor Client {
         var kept: [Tool] = []
         for tool in page.items {
             do { toolHeaders[tool.name] = try ToolHeaders(inputSchema: tool.inputSchema); kept.append(tool) }
-            catch { toolHeaders[tool.name] = nil; rejectedTools.append((tool.name, String(describing: error))) }
+            catch { toolHeaders[tool.name] = nil; rejectedTools.append(RejectedTool(name: tool.name, reason: String(describing: error))) }
         }
         return Page(items: kept, nextCursor: page.nextCursor, raw: page.raw)
     }
@@ -85,34 +85,39 @@ public actor Client {
     public func listResources(cursor: String? = nil) async throws -> Page<Resource> {
         try await page("resources/list", key: "resources", cursor: cursor, definition: .ListResourcesResult, Resource.init)
     }
-    public func listResourceTemplates(cursor: String? = nil) async throws -> Page<JSON> {
-        try await page("resources/templates/list", key: "resourceTemplates", cursor: cursor, definition: .ListResourceTemplatesResult) { $0 }
+    public func listResourceTemplates(cursor: String? = nil) async throws -> Page<ResourceTemplate> {
+        try await page("resources/templates/list", key: "resourceTemplates", cursor: cursor, definition: .ListResourceTemplatesResult, ResourceTemplate.init)
     }
-    /// `resources/read`; returns the `contents` array (text or base64 `blob` entries).
-    public func readResource(_ uri: String) async throws -> [JSON] {
+    /// `resources/read`; text entries and decoded binary (`blob`) entries.
+    public func readResource(_ uri: String) async throws -> [ResourceContents] {
         let result = try await perform("resources/read", params: [JSONMember("uri", value: .string(uri))], name: uri, definition: .ReadResourceResult)
-        return result.objectValue?["contents"]?.arrayValue ?? []
+        return try (result.objectValue?["contents"]?.arrayValue ?? []).map(ResourceContents.init)
     }
 
     public func listPrompts(cursor: String? = nil) async throws -> Page<Prompt> {
         try await page("prompts/list", key: "prompts", cursor: cursor, definition: .ListPromptsResult, Prompt.init)
     }
-    /// `prompts/get`; returns the raw result (`messages`, optional `description`).
-    public func getPrompt(_ name: String, arguments: [String: String] = [:]) async throws -> JSON {
+    /// `prompts/get`.
+    public func getPrompt(_ name: String, arguments: [String: String] = [:]) async throws -> PromptResult {
         var params = [JSONMember("name", value: .string(name))]
         if !arguments.isEmpty {
             let members = arguments.sorted { $0.key < $1.key }.map { JSONMember($0.key, value: .string($0.value)) }
             params.append(JSONMember("arguments", value: .object(try JSONObject(members: members))))
         }
-        return try await perform("prompts/get", params: params, name: name, definition: .GetPromptResult)
+        return try PromptResult(try await perform("prompts/get", params: params, name: name, definition: .GetPromptResult))
     }
 
-    /// `completion/complete` for a prompt or resource-template reference.
-    public func complete(reference: JSON, argument name: String, value: String, context: JSON? = nil) async throws -> JSON {
-        var params = [JSONMember("ref", value: reference),
+    /// `completion/complete` for an argument of a prompt or resource template.
+    /// - Parameter previousArguments: values of arguments already chosen (`context.arguments`).
+    public func complete(_ reference: CompletionReference, argument name: String, value: String,
+                         previousArguments: [String: String] = [:]) async throws -> Completion {
+        var params = [JSONMember("ref", value: try reference.json),
                       JSONMember("argument", value: .object(try JSONObject(members: [JSONMember("name", value: .string(name)), JSONMember("value", value: .string(value))])))]
-        if let context { params.append(JSONMember("context", value: context)) }
-        return try await perform("completion/complete", params: params, definition: .CompleteResult)
+        if !previousArguments.isEmpty {
+            let arguments = previousArguments.sorted { $0.key < $1.key }.map { JSONMember($0.key, value: .string($0.value)) }
+            params.append(JSONMember("context", value: .object(try JSONObject(members: [JSONMember("arguments", value: .object(try JSONObject(members: arguments)))]))))
+        }
+        return Completion(try await perform("completion/complete", params: params, definition: .CompleteResult))
     }
 
     /// Any request, for extension methods such as `tasks/get` or `skills/list`. The result is
@@ -126,10 +131,8 @@ public actor Client {
     /// `subscriptions/listen`. `onEvent` first receives `.acknowledged` with the filters the
     /// server agreed to, then events, until the server ends the subscription (the call
     /// returns) or the calling task is cancelled.
-    /// - Parameter notifications: the `SubscriptionFilter` object, for example
-    ///   `{"toolsListChanged": true, "resourceSubscriptions": ["file:///a"]}`.
-    public func listen(_ notifications: JSON, onEvent: @escaping @Sendable (ListenEvent) async throws -> Void) async throws {
-        _ = try await perform("subscriptions/listen", params: [JSONMember("notifications", value: notifications)],
+    public func listen(_ filter: SubscriptionFilter, onEvent: @escaping @Sendable (ListenEvent) async throws -> Void) async throws {
+        _ = try await perform("subscriptions/listen", params: [JSONMember("notifications", value: try filter.json)],
                               definition: .SubscriptionsListenResult, onEvent: onEvent)
     }
 
@@ -180,7 +183,7 @@ public actor Client {
                 let failure = Self.serverError(error)
                 // UnsupportedProtocolVersionError: retry once when the server says it supports
                 // our only version after all; otherwise report what it supports.
-                if case .server(-32022, _, let data) = failure {
+                if case .server(ClientError.Code.unsupportedProtocolVersion, _, let data) = failure {
                     let supported = data?.objectValue?["supported"]?.arrayValue?.compactMap(\.stringValue) ?? []
                     if supported.contains(Self.protocolVersion), !versionRetried { versionRetried = true; continue }
                     throw ClientError.unsupportedProtocol(supported: supported)
@@ -219,7 +222,7 @@ public actor Client {
         var meta = [JSONMember("io.modelcontextprotocol/protocolVersion", value: .string(Self.protocolVersion)),
                     JSONMember("io.modelcontextprotocol/clientCapabilities", value: try configuration.capabilities())]
         if let info = configuration.info { meta.append(JSONMember("io.modelcontextprotocol/clientInfo", value: info)) }
-        if logs, let level = configuration.logLevel { meta.append(JSONMember("io.modelcontextprotocol/logLevel", value: .string(level))) }
+        if logs, let level = configuration.logLevel { meta.append(JSONMember("io.modelcontextprotocol/logLevel", value: .string(level.rawValue))) }
         if let progressToken { meta.append(JSONMember("progressToken", value: .string(progressToken))) }
         let parameters = [JSONMember("_meta", value: .object(try JSONObject(members: meta)))] + params
         let message = JSON.object(try JSONObject(members: [
@@ -244,7 +247,12 @@ public actor Client {
             switch method {
             case "elicitation/create":
                 guard let elicitation = configuration.elicitation else { throw ClientError.unsupportedInput(method: method) }
-                response = try await elicitation.handler(params); definition = .ElicitResult
+                let request = try ElicitationRequest(params)
+                switch request.mode {
+                case .form: guard elicitation.form else { throw ClientError.unsupportedInput(method: method) }
+                case .url: guard elicitation.url else { throw ClientError.unsupportedInput(method: method) }
+                }
+                response = try await elicitation.handler(request).json; definition = .ElicitResult
                 // Accepted form content must match the requested schema before it is sent.
                 if response.objectValue?["action"]?.stringValue == "accept", let content = response.objectValue?["content"],
                    let schema = params.objectValue?["requestedSchema"] {
@@ -254,11 +262,13 @@ public actor Client {
                 }
             case "sampling/createMessage":
                 guard let sampling = configuration.sampling else { throw ClientError.unsupportedInput(method: method) }
-                response = try await sampling(params); definition = .CreateMessageResult
+                response = try await sampling(try SamplingRequest(params)).json; definition = .CreateMessageResult
             case "roots/list":
                 guard let roots = configuration.roots else { throw ClientError.unsupportedInput(method: method) }
-                response = try await roots(params); definition = .ListRootsResult
-            default: throw ClientError.unsupportedInput(method: method)
+                response = try await roots().json; definition = .ListRootsResult
+            default:
+                guard let handler = configuration.additionalInputHandlers[method] else { throw ClientError.unsupportedInput(method: method) }
+                response = try await handler(params); definition = .Result
             }
             guard try await validator.validate(response, as: definition) else { throw ClientError.invalidResponse("handler result for \(method)") }
             responses.append(JSONMember(entry.key.string, value: response))
@@ -282,7 +292,7 @@ public actor Client {
                                       message: object?["message"]?.stringValue))
         case "notifications/message":
             try await check(.LoggingMessageNotification)
-            await onLog?(LogMessage(level: object?["level"]?.stringValue ?? "info", logger: object?["logger"]?.stringValue,
+            await onLog?(LogMessage(level: object?["level"]?.stringValue.flatMap(LoggingLevel.init(rawValue:)) ?? .info, logger: object?["logger"]?.stringValue,
                                     data: object?["data"] ?? .null))
         case "notifications/subscriptions/acknowledged":
             try await check(.SubscriptionsAcknowledgedNotification)
