@@ -34,7 +34,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-system.git", from: "1.8.1"),
         .package(url: "https://github.com/swiftlang/swift-subprocess.git", from: "1.0.2"),
         // Durable task store backend (ADR-0004); used only by MCPTasksSQLite. Pinned to 0.2.x.
-        .package(url: "https://github.com/ThorFuchs/Swift-SQLite.git", .upToNextMinor(from: "0.9.0")),
+        .package(url: "https://github.com/ThorFuchs/Swift-SQLite.git", from: "1.0.0"),
     ],
     targets: [
         .target(name: "MCPProtocol", dependencies: [.product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux])), .product(name: "JSON", package: "swift-json"), .product(name: "JSONSchema", package: "swift-json")], resources: [.copy("Resources")]),
