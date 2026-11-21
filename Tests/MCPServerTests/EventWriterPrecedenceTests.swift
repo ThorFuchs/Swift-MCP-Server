@@ -13,9 +13,12 @@ private struct SinkFault: Error, Equatable {}
 private func precedenceJSON(_ text: String) throws -> JSON { try JSONParser().parseWithReport(Array(text.utf8)).result }
 private let precedencePrincipal = VerifiedPrincipal(subject: ScalarText("alice"), issuer: ScalarText("issuer"), resource: ScalarText("server"), scopes: [])
 private func precedenceServer(_ tool: ToolRegistration, events: EventPolicy? = nil) async throws -> Server {
+    // Small result reservation so 16 concurrent requests fit the default buffer
+    // bound (each request reserves `resultBytes`); responses here are tiny.
     try await Server.make(info: precedenceJSON(#"{"name":"precedence","version":"1"}"#), catalog: ServerCatalog(tools: [tool]),
         cursors: CursorProtector(keys: [.init(identifier: ScalarText("cursor"), material: Data(repeating: 9, count: 32))],
-            active: ScalarText("cursor"), epoch: ScalarText("cursor"), clock: { 1000 }), events: events)
+            active: ScalarText("cursor"), epoch: ScalarText("cursor"), clock: { 1000 }),
+        configuration: ServerConfiguration(resultBytes: 65_536), events: events)
 }
 private func precedenceCall(_ name: String, id: Int, progress: Bool = false) -> Data {
     let meta = progress ? #", "progressToken":"p""# : ""
@@ -37,16 +40,35 @@ private func precedenceIdle(_ server: Server) async {
             try precedenceJSON(#"{"resultType":"complete","content":[]}"#)
         }
         let server = try await precedenceServer(tool)
-        // Repetition widens the race window; every iteration must hold.
-        for id in 1...200 {
-            let attempts = Mutex(0)
-            do {
-                try await server.dispatchEvents(precedenceCall("done", id: id), principal: precedencePrincipal,
-                    origin: ScalarText("origin"), mode: mode) { _ in attempts.withLock { $0 += 1 }; throw SinkFault() }
-                Issue.record("A failed terminal write must not succeed (iteration \(id))")
-            } catch let error as SinkFault { #expect(error == SinkFault()) }
-            catch { Issue.record("Iteration \(id): expected the sink failure, got \(error)"); break }
-            #expect(attempts.withLock { $0 } == 1)
+        // The race is between sibling tasks, so repetition with concurrent
+        // requests (one principal per lane, within the per-principal limit)
+        // widens its window. Every single request must hold.
+        let lanes = 16
+        let principals = (0..<lanes).map { VerifiedPrincipal(subject: ScalarText("lane\($0)"), issuer: ScalarText("issuer"), resource: ScalarText("server"), scopes: []) }
+        for round in 1...100 {
+            let outcomes = try await withThrowingTaskGroup(of: (any Error)?.self) { group in
+                for lane in 0..<lanes {
+                    group.addTask {
+                        let attempts = Mutex(0)
+                        do {
+                            try await server.dispatchEvents(precedenceCall("done", id: round * lanes + lane), principal: principals[lane],
+                                origin: ScalarText("origin"), mode: mode) { _ in attempts.withLock { $0 += 1 }; throw SinkFault() }
+                            return nil
+                        } catch {
+                            #expect(attempts.withLock { $0 } == 1)
+                            return error
+                        }
+                    }
+                }
+                var outcomes: [(any Error)?] = []
+                for try await outcome in group { outcomes.append(outcome) }
+                return outcomes
+            }
+            let unexpected = outcomes.filter { ($0 as? SinkFault) != SinkFault() }
+            guard unexpected.isEmpty else {
+                Issue.record("Round \(round): expected only the sink failure, got \(unexpected.map { $0.map { "\($0)" } ?? "success" })")
+                break
+            }
         }
         await precedenceIdle(server)
     }
