@@ -108,7 +108,7 @@ Only one active Research driver/worker with existing supersession/join semantics
 
 No changes to Core SDK public API, HTTP SDK internal classes, transport security policy, or legacy revision support are authorized by this product spec. If a true public SDK defect is encountered, file a separate Core/HTTP issue with a minimal reproducer.
 
-Package integration rules: external versioned dependencies where released, no dependency solely for a logo or marketing showcase, test all supported platform and clean-consumer footprints. See PORTFOLIO_INTEGRATION.md.
+Package integration rules: external versioned dependencies where released, no dependency solely for a logo or marketing showcase, test all supported platform and clean-consumer footprints. The **approved direct SwiftSoup → Swift-HTML** substitution is a source-provenance/redistribution migration requiring a separate RE-08 issue and independent semantic parity tests; it is not part of this rename PR. See PORTFOLIO_INTEGRATION.md.
 
 ## 7. Release stages and work boundaries
 
@@ -119,12 +119,13 @@ Package integration rules: external versioned dependencies where released, no de
 | RE-02 | [#34](https://github.com/ThorFuchs/Swift-MCP-Server/issues/34) | Real in-app HTTP MCP client and stdio MCP client | RE-00, Core #28 |
 | RE-03 | [#35](https://github.com/ThorFuchs/Swift-MCP-Server/issues/35) | Adaptive native research reader, citations/provenance | RE-00/01; coordinate 02 |
 | RE-04 | [#36](https://github.com/ThorFuchs/Swift-MCP-Server/issues/36) | Opt-in exchange inspector and connection recipes | RE-02 |
-| RE-05 | [#37](https://github.com/ThorFuchs/Swift-MCP-Server/issues/37) | Packaging, docs, accessibility, licenses, exact-SHA tests | RE-00…04, Core/HTTP release gates |
+| RE-08 | [#42](https://github.com/ThorFuchs/Swift-MCP-Server/issues/42) | Replace direct SwiftSoup package with Swift-HTML, preserve Wikimedia normalizer behavior and verify final third-party licenses | RE-00; Swift-HTML read-only traversal API/parity gates; before RE-05 |
+| RE-05 | [#37](https://github.com/ThorFuchs/Swift-MCP-Server/issues/37) | Packaging, docs, accessibility, licenses, exact-SHA tests | RE-00…04, **RE-08**, Core/HTTP release gates |
 
 Optional after 1.0:
 - [RE-06 #38](https://github.com/ThorFuchs/Swift-MCP-Server/issues/38) Swift-GFM-backed Research Notes only upon user-value validation.
 - [RE-07 #39](https://github.com/ThorFuchs/Swift-MCP-Server/issues/39) Swift-SQLite-backed durable notebook only upon retention/privacy agreement.
-- Swift-HTML and Swift-Liquid: **not adopted**; rationale in portfolio matrix.
+- **Swift-HTML is the required provenance-driven replacement for direct SwiftSoup** via [RE-08 #42](https://github.com/ThorFuchs/Swift-MCP-Server/issues/42), not an added showpiece; Swift-Liquid remains out of scope. See portfolio matrix for API compatibility and residual MIT-license requirements.
 
 ## 8. Release/CI acceptance contract
 
@@ -136,6 +137,7 @@ Must prove:
 - No auth/provenance/privacy/budget regression; no log of body or credentials; network and listener opt-in.
 - SwiftPM manifest, product/target directory, generated app metadata, CLI command and README are identical in naming.
 - Real native build + reproducible app package; license and attribution; no official Wikimedia endorsement.
+- RE-08 completed: no direct `scinfu/SwiftSoup` dependency in the Research Explorer package; Swift-HTML public API migration tested for exact normalization/identity behavior, with source-only vendor provenance and mandatory MIT notices in final redistribution.
 - Exact tagged dependency graph for SDK releases, no unresolved \`main\` in an advertised immutable release.
 - Explicit blocker handling for HTTP SwiftNIO macOS EOF and optimized build if still pending, rather than treating a green but masked test as a complete production guarantee.
 
