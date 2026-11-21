@@ -4,6 +4,6 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 export SDKROOT="${SDKROOT:-$(xcrun --sdk macosx --show-sdk-path)}"
-swift build --product wikipedia-research-explorer
-export WRE_CLI="$(swift build --show-bin-path)/wikipedia-research-explorer"
+swift build --product research-explorer
+export RE_CLI="$(swift build --show-bin-path)/research-explorer"
 swift test "$@"

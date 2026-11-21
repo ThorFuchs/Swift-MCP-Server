@@ -35,7 +35,7 @@ public enum ExplorerTools {
                                   clock: @escaping @Sendable () -> Int64, responseBytes: Int = 131_072, observer: (any ExplorerToolObserver)? = nil) async throws -> Server {
         let key = try CursorProtector.Key(identifier: ScalarText("wre"), material: catalogKeyMaterial)
         let cursors = try CursorProtector(keys: [key], active: ScalarText("wre"), clock: clock)
-        let info = try WireCodec.parse(Array(#"{"name":"wikipedia-research-explorer","version":"0.1.0-source"}"#.utf8), limits: .balanced).result
+        let info = try WireCodec.parse(Array(#"{"name":"research-explorer","version":"0.1.0-source"}"#.utf8), limits: .balanced).result
         let configuration = try ServerConfiguration(activeRequests: 4, queuedRequests: 4, requestsPerPrincipal: 2,
             terminalWork: 524_288, messageBytes: 65_536, resultBytes: 131_072, catalogEntries: 4, pageEntries: 4,
             deadlineMilliseconds: 15_000, bufferedBytes: 71_303_168,

@@ -1,4 +1,4 @@
-# Wikipedia Research Explorer
+# Research Explorer
 
 A complete example built on Swift-MCP-Server: an MCP server that lets an assistant research
 Wikipedia articles with four bounded, read-only tools, plus a native macOS app that hosts the
@@ -21,13 +21,13 @@ Requirements: macOS 27, Swift 6.4.
 
 ```bash
 # MCP over stdio (offline Riverglass fixtures), e.g. for a local assistant
-swift run --package-path Examples/WikipediaResearchExplorer wikipedia-research-explorer --stdio
+swift run --package-path Examples/ResearchExplorer research-explorer --stdio
 
 # Human-readable walkthrough of the same four tools
-swift run --package-path Examples/WikipediaResearchExplorer wikipedia-research-explorer --walkthrough
+swift run --package-path Examples/ResearchExplorer research-explorer --walkthrough
 
 # macOS app: Research / Server / Activity, live Wikipedia (enwiki) or Offline demo
-swift run --package-path Examples/WikipediaResearchExplorer WikipediaResearchExplorerApp
+swift run --package-path Examples/ResearchExplorer ResearchExplorerApp
 ```
 
 The app starts with zero network requests. Its **Server** tab starts a loopback Streamable HTTP
@@ -49,7 +49,7 @@ Design notes: [Architecture](Docs/ARCHITECTURE.md) · [Live Wikipedia contract](
 ## Tests
 
 ```bash
-Examples/WikipediaResearchExplorer/Scripts/test.sh
+Examples/ResearchExplorer/Scripts/test.sh
 ```
 
 builds the CLI and runs all tests, including an end-to-end stdio journey against the real

@@ -11,7 +11,7 @@ struct ServerView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 Text("Server overview").font(.largeTitle.bold())
-                Text("Wikipedia Research Explorer · MCP 2026-07-28 · \(lifetime.profile.rawValue)").foregroundStyle(.secondary)
+                Text("Research Explorer · MCP 2026-07-28 · \(lifetime.profile.rawValue)").foregroundStyle(.secondary)
                 Picker("Research source", selection: Binding(get: { lifetime.profile }, set: { lifetime.selectSource($0) })) {
                     ForEach(SourceProfile.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }.disabled(!lifetime.canSwitchSource)

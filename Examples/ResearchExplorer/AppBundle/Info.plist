@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-<key>CFBundleExecutable</key><string>WikipediaResearchExplorerApp</string>
-<key>CFBundleIdentifier</key><string>io.github.ThorFuchs.WikipediaResearchExplorer</string>
-<key>CFBundleName</key><string>Wikipedia Research Explorer</string>
-<key>CFBundleDisplayName</key><string>Wikipedia Research Explorer</string>
+<key>CFBundleExecutable</key><string>ResearchExplorerApp</string>
+<key>CFBundleIdentifier</key><string>io.github.ThorFuchs.ResearchExplorer</string>
+<key>CFBundleName</key><string>Research Explorer</string>
+<key>CFBundleDisplayName</key><string>Research Explorer</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleVersion</key><string>1</string>
 <key>CFBundleShortVersionString</key><string>0.1.0</string>

@@ -6,11 +6,11 @@ let core = "swift-mcp-server"
 let http = "swift-mcp-server-http"
 
 let package = Package(
-    name: "WikipediaResearchExplorer",
+    name: "ResearchExplorer",
     platforms: [.macOS("27.0")],
     products: [
-        .executable(name: "wikipedia-research-explorer", targets: ["WikipediaResearchExplorer"]),
-        .executable(name: "WikipediaResearchExplorerApp", targets: ["WikipediaResearchExplorerApp"]),
+        .executable(name: "research-explorer", targets: ["ResearchExplorer"]),
+        .executable(name: "ResearchExplorerApp", targets: ["ResearchExplorerApp"]),
     ],
     dependencies: [
         // Core and HTTP by URL: the HTTP package depends on the core by URL, so a local path
@@ -34,10 +34,10 @@ let package = Package(
             .product(name: "MCPHTTP", package: http), .product(name: "MCPServer", package: core),
             .product(name: "MCPProtocol", package: core), .product(name: "MCPServiceLifecycle", package: core),
             .product(name: "JSON", package: "swift-json")]),
-        .executableTarget(name: "WikipediaResearchExplorer", dependencies: ["ExplorerDomain", "WikimediaAccess", "ExplorerMCP",
+        .executableTarget(name: "ResearchExplorer", dependencies: ["ExplorerDomain", "WikimediaAccess", "ExplorerMCP",
             .product(name: "MCPProtocol", package: core), .product(name: "MCPServer", package: core),
             .product(name: "MCPStdio", package: core), .product(name: "SystemPackage", package: "swift-system")]),
-        .executableTarget(name: "WikipediaResearchExplorerApp", dependencies: ["ExplorerPresentation", "ExplorerDomain", "WikimediaAccess"]),
+        .executableTarget(name: "ResearchExplorerApp", dependencies: ["ExplorerPresentation", "ExplorerDomain", "WikimediaAccess"]),
         .testTarget(name: "ExplorerDomainTests", dependencies: ["ExplorerDomain"]),
         .testTarget(name: "WikimediaAccessTests", dependencies: ["ExplorerDomain", "WikimediaAccess",
             .product(name: "JSON", package: "swift-json")]),
@@ -46,7 +46,7 @@ let package = Package(
             .product(name: "MCPServerTesting", package: core), .product(name: "JSON", package: "swift-json")]),
         .testTarget(name: "ExplorerPresentationTests", dependencies: ["ExplorerPresentation", "ExplorerDomain", "WikimediaAccess",
             .product(name: "JSON", package: "swift-json"), .product(name: "MCPProtocol", package: core)]),
-        .testTarget(name: "ExplorerAppTests", dependencies: ["WikipediaResearchExplorerApp", "ExplorerPresentation",
+        .testTarget(name: "ExplorerAppTests", dependencies: ["ResearchExplorerApp", "ExplorerPresentation",
             "ExplorerDomain", "WikimediaAccess"]),
     ],
     swiftLanguageModes: [.v6]

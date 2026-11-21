@@ -165,7 +165,7 @@ public actor WikipediaHTTPTransport: LiveTransport {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = min(15, Double(remaining.components.seconds) + Double(remaining.components.attoseconds) / 1e18)
-        request.setValue("WikipediaResearchExplorer/0.1 (https://github.com/ThorFuchs)", forHTTPHeaderField: "User-Agent")
+        request.setValue("ResearchExplorer/0.1 (https://github.com/ThorFuchs)", forHTTPHeaderField: "User-Agent")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         let owner = OwnedWikipediaRequest(deadline: deadline, allowedURL: allowedURL)
         let session = URLSession(configuration: configuration, delegate: owner, delegateQueue: nil)

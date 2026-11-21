@@ -40,7 +40,7 @@ then add `MCPServer` and `MCPStdio` (and optionally `MCPServiceLifecycle`) to yo
 ## Quick start
 
 A minimal stdio server lives in [`Examples/StdioServer`](Examples/StdioServer); the full example
-app is the [Wikipedia Research Explorer](Examples/WikipediaResearchExplorer) (stdio CLI + macOS app):
+app is the [Research Explorer](Examples/ResearchExplorer) (stdio CLI + macOS app):
 
 ```bash
 swift run --package-path Examples/StdioServer ExampleStdioServer
