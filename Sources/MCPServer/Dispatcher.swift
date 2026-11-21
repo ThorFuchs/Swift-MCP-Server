@@ -268,7 +268,10 @@ struct Dispatcher: Sendable {
                 while !produced || !written {
                     guard let completed = try await group.next() else { throw CoreFailure.disconnected }
                     switch completed { case .producer: produced = true; case .writer: written = true }
-                    if let channel, await channel.failed { throw CoreFailure.eventOverflow }
+                    // A writer failure is reported by the writer child itself (for
+                    // example the transport's broken pipe), whichever child the
+                    // group returns first; only producer-side failures are overflow.
+                    if let channel, await channel.failedBeforeDelivery { throw CoreFailure.eventOverflow }
                 }
                 group.cancelAll()
                 // Scope exit joins even an uncooperative callback. A host may
