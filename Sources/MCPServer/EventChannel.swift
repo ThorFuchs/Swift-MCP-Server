@@ -63,6 +63,12 @@ actor EventChannel {
     private var slots = 0, bytes = 0, emitted = 0
     private var finishing = false, terminal: Data?, ended = false
     private(set) var failed = false
+    /// The transport sink (or the writer's own bound) ended this channel. Its
+    /// writer child reports that error itself; it is not an event overflow.
+    private var writerFailed = false
+    /// Failed for a reason other than this channel's writer, such as event
+    /// admission/overflow or subscription teardown.
+    var failedBeforeDelivery: Bool { failed && !writerFailed }
     var isOpen: Bool { !finishing && !ended && !failed }
     init(policy: EventPolicy, ledger: EventLedger, principal: VerifiedPrincipal, budget: RequestBudget, wire: PreparedWire) {
         self.policy = policy; self.ledger = ledger; self.principal = PrincipalKey(principal); self.budget = budget; self.wire = wire
@@ -135,6 +141,6 @@ actor EventChannel {
                     try await Task.sleep(for: .milliseconds(5))
                 }
             }
-        } catch { await abort(failure: true); throw error }
+        } catch { writerFailed = true; await abort(failure: true); throw error }
     }
 }

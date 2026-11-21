@@ -88,6 +88,24 @@ private func observed(_ events: ConstructionObservations, _ prefix: String) asyn
             #expect(events.count("joined.") == 2 && events.count("closed.") == 6)
         }
     }
+    /// #28 / R3: a response written to a closed output is the transport's broken
+    /// pipe, never the server's `eventOverflow`, whichever dispatcher child wins.
+    @Test func brokenOutputAfterResponseIsAlwaysPipeFailure() async throws {
+        let server = try await deferredServer()
+        let request = Array((#"{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}"# + "\n").utf8)
+        for index in 0..<50 {
+            let p = try ConstructionPipes(); defer { p.close() }
+            let events = ConstructionObservations(); let t = try p.make(events)
+            _ = try request.withUnsafeBytes { try p.incoming.writeEnd.write($0) }
+            try p.closeInputPeer(); try p.closeOutputPeer()
+            do {
+                try await t.run(server:server,principal:deferredPrincipal,origin:ScalarText("broken"+String(index)))
+                Issue.record("Iteration \(index): a closed output must fail the run")
+            } catch { #expect((error as? StdioFailure) == .brokenPipe, "iteration \(index): \(error)") }
+            #expect(events.count("joined.") == 2 && events.count("closed.") == 6)
+            #expect(t.statistics.phase == .stopped && t.statistics.writerBytes == 0)
+        }
+    }
     @Test func cleanupFailurePreservesPrimaryAndSecondJoin() async throws { // G01-S09
         let server = try await deferredServer(); let p = try ConstructionPipes(); defer { p.close() }
         let events = ConstructionObservations(["activate.output","join.input","join.output"])
