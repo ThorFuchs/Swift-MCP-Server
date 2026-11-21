@@ -123,7 +123,13 @@ private final class OwnedWikipediaRequest: NSObject, URLSessionDataDelegate, Sen
         let completion = state.withLock { value -> (CheckedContinuation<LiveHTTPResponse, any Error>, Result<LiveHTTPResponse, any Error>)? in
             guard !value.completed, let continuation = value.continuation else { return nil }
             value.completed = true; value.continuation = nil; value.task = nil
-            if let failure = value.failure ?? error { return (continuation, .failure(failure)) }
+            if let failure = value.failure { return (continuation, .failure(failure)) }
+            // The request timeout is derived from this deadline: whichever of it and the
+            // deadline timer fires first, the outcome is the same deadline (#28).
+            if let error = error as? URLError, error.code == .timedOut {
+                return (continuation, .failure(SourceProfile.wikipediaEnglish.problem(.upstreamTimedOut)))
+            }
+            if let error { return (continuation, .failure(error)) }
             guard ContinuousClock.now < deadline else { return (continuation, .failure(SourceProfile.wikipediaEnglish.problem(.upstreamTimedOut))) }
             guard let response = value.response else { return (continuation, .failure(LiveFailure.malformed)) }
             var headers: [String: String] = [:]
