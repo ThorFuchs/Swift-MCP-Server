@@ -22,6 +22,23 @@ private final class StallingURLProtocol: URLProtocol {
     override func stopLoading() { Self.counts.withLock { $0.stopped += 1 } }
 }
 
+/// The URL loading system's own request timeout ends a partial response. The
+/// transport derives that timeout from its deadline, so this is the same event
+/// as its deadline timer firing; which one fires first depends on scheduling
+/// (the timer task runs on the cooperative pool, the request timeout does not).
+private final class RequestTimeoutURLProtocol: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": "application/json", "Content-Length": "1024"])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data("{\"pages\":".utf8))
+        client?.urlProtocol(self, didFailWithError: URLError(.timedOut))
+    }
+    override func stopLoading() {}
+}
+
 @Suite(.serialized) struct LiveHTTPStallTests {
     private func makeTransport() -> WikipediaHTTPTransport {
         let configuration = URLSessionConfiguration.ephemeral
@@ -56,6 +73,20 @@ private final class StallingURLProtocol: URLProtocol {
             try await waitForStop()
             #expect(StallingURLProtocol.counts.withLock { $0.stopped } == 1)
         } catch { task.cancel(); _ = await task.result; throw error }
+    }
+    /// #28 / R3: whichever of the two deadline mechanisms fires first, the
+    /// transport reports its deadline as `upstreamTimedOut`, never a raw URLError.
+    @Test func requestTimeoutOfPartialResponseIsTheDeadline() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [RequestTimeoutURLProtocol.self]
+        let transport = WikipediaHTTPTransport(configuration: configuration)
+        let url = try WikipediaRoute.search("stall", limit: 1)
+        do {
+            _ = try await transport.get(url, deadline: ContinuousClock.now.advanced(by: .seconds(30)))
+            Issue.record("A timed-out partial response must not succeed")
+        } catch let problem as ExplorerProblem {
+            #expect(problem.code == .upstreamTimedOut)
+        } catch { Issue.record("Expected upstreamTimedOut, got \(error)") }
     }
     @Test func deadlineOfPartialResponseJoinsTask() async throws {
         StallingURLProtocol.counts.withLock { $0 = .init() }
