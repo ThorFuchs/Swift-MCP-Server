@@ -1,6 +1,6 @@
 # Architecture
 
-One SwiftPM GUI product, WikipediaResearchExplorerApp, wraps the same ExplorerService
+One SwiftPM GUI product, ResearchExplorerApp, wraps the same ExplorerService
 and four ExplorerTools registrations as the unchanged CLI. Exactly three sidebar
 destinations use one NavigationSplitView. No UI or Wikipedia semantics enter the SDK.
 The system draws sidebar/toolbar materials; no generated mockup chrome is copied.

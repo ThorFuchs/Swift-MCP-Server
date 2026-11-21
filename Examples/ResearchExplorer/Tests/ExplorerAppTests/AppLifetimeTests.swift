@@ -4,7 +4,7 @@ import Testing
 import ExplorerDomain
 import WikimediaAccess
 import ExplorerPresentation
-@testable import WikipediaResearchExplorerApp
+@testable import ResearchExplorerApp
 
 private actor Hold {
     private var entered = false, done = false

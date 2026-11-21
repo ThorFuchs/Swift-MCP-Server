@@ -4,7 +4,7 @@ import Testing
 import ExplorerDomain
 @testable import WikimediaAccess
 import ExplorerPresentation
-@testable import WikipediaResearchExplorerApp
+@testable import ResearchExplorerApp
 
 private actor LoopbackForwarder: LiveTransport {
     private var transport: WikipediaHTTPTransport?

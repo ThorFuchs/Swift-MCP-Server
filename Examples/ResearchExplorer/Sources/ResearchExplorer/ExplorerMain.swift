@@ -5,7 +5,7 @@ import ExplorerDomain
 import WikimediaAccess
 import ExplorerMCP
 
-@main struct WikipediaResearchExplorer {
+@main struct ResearchExplorer {
     static func main() async {
         let args = Array(CommandLine.arguments.dropFirst())
         if args == ["--help"] { usage(); return }
@@ -36,7 +36,7 @@ import ExplorerMCP
         }
     }
     private static func usage() {
-        FixtureStdioHost.diagnostic("Wikipedia Research Explorer (synthetic fixtures)\nChoose --walkthrough for human output or --stdio for MCP frames over pipes.\n--help exits 0; missing or invalid mode exits 64.\n")
+        FixtureStdioHost.diagnostic("Research Explorer (synthetic fixtures)\nChoose --walkthrough for human output or --stdio for MCP frames over pipes.\n--help exits 0; missing or invalid mode exits 64.\n")
     }
     private static func walkthrough(_ service: ExplorerService) async throws {
         let search = try await service.search(.init(query: "Riverglass", project: "fixture-enwiki", limit: 10))

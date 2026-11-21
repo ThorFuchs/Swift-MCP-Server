@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-// End-to-end checks of the real `wikipedia-research-explorer --stdio` executable over pipes.
-// The binary path comes from WRE_CLI (set by Scripts/test.sh); without it these tests fail
+// End-to-end checks of the real `research-explorer --stdio` executable over pipes.
+// The binary path comes from RE_CLI (set by Scripts/test.sh); without it these tests fail
 // on purpose instead of being skipped.
 import Foundation
 import Testing
@@ -15,7 +15,7 @@ private final class CLIChild {
     private var lines: AsyncLineSequence<FileHandle.AsyncBytes>.AsyncIterator
 
     init(arguments: [String]) throws {
-        let binary = try #require(ProcessInfo.processInfo.environment["WRE_CLI"], "Set WRE_CLI to the built wikipedia-research-explorer")
+        let binary = try #require(ProcessInfo.processInfo.environment["RE_CLI"], "Set RE_CLI to the built research-explorer")
         process.executableURL = URL(fileURLWithPath: binary)
         process.arguments = arguments
         process.standardInput = input; process.standardOutput = output; process.standardError = errors
@@ -116,6 +116,6 @@ private enum Frames {
         let child = try CLIChild(arguments: arguments)
         let end = try await child.finish()
         #expect(end.exit == exit && end.extraStdoutLines == 0)
-        #expect(end.stderr.hasPrefix("Wikipedia Research Explorer (synthetic fixtures)\n"))
+        #expect(end.stderr.hasPrefix("Research Explorer (synthetic fixtures)\n"))
     }
 }

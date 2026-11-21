@@ -2,12 +2,12 @@
 import SwiftUI
 import ExplorerPresentation
 
-@main struct WikipediaResearchExplorerApp: App {
+@main struct ResearchExplorerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var lifetime = AppLifetime()
     @AppStorage("appearance") private var appearance = "system"
     var body: some Scene {
-        WindowGroup("Wikipedia Research Explorer", id: "explorer") {
+        WindowGroup("Research Explorer", id: "explorer") {
             ExplorerRootView(lifetime: lifetime)
                 .preferredColorScheme(appearance == "dark" ? .dark : appearance == "light" ? .light : nil)
                 .frame(minWidth: 1000, minHeight: 700)
