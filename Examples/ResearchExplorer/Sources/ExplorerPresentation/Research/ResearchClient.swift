@@ -2,6 +2,7 @@
 import Foundation
 import ExplorerDomain
 import WikimediaAccess
+import ExplorerMCP
 
 public protocol ResearchClient: Sendable {
     func search(_ input: SearchInput) async throws -> SearchPage
@@ -10,6 +11,8 @@ public protocol ResearchClient: Sendable {
     func references(_ input: ReferencesInput) async throws -> SectionReferences
 }
 extension ExplorerService: ResearchClient {}
+/// The same research operations over a real MCP connection (HTTP or stdio).
+extension MCPResearchClient: ResearchClient {}
 
 /// Provider choice is an actual dependency, never an appearance preference.
 public typealias ResearchSource = SourceProfile

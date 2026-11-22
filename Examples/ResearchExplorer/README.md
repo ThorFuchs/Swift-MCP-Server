@@ -23,7 +23,10 @@ Requirements: macOS 27, Swift 6.4.
 # MCP over stdio (offline Riverglass fixtures), e.g. for a local assistant
 swift run --package-path Examples/ResearchExplorer research-explorer --stdio
 
-# Human-readable walkthrough of the same four tools
+# A real MCP client: launches `research-explorer --stdio` as a child and calls all four tools
+swift run --package-path Examples/ResearchExplorer research-explorer --mcp-client
+
+# Human-readable walkthrough of the same four tools, called directly (not over MCP)
 swift run --package-path Examples/ResearchExplorer research-explorer --walkthrough
 
 # macOS app: Research / Server / Activity, Offline demo (default) or live Wikipedia (enwiki)
@@ -45,6 +48,7 @@ because the HTTP package depends on the core by URL as well.
 
 - Typed tool registrations with input/output schemas and bounded, structured results
 - The stdio transport (`MCPStdio`) and the HTTP transport (`MCPHTTP`) serving one service
+- Real clients of both: `Client` + `HTTPClientTransport` (Server → *Explore MCP*) and `Client` + `StdioClientTransport` (`--mcp-client`), with outputSchema-validated, identity-checked results
 - Owned lifetimes: explicit start/stop, cancellation and joined shutdown, no global side effects
 - Bounded live I/O: deadlines, limited retries, size caps, no cookies, credentials or redirect escapes
 
