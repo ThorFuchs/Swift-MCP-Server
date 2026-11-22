@@ -43,6 +43,7 @@ private final class ParkedTransport: ClientTransport, Sendable {
     }
 }
 
+private enum LiveServerStartup: Error { case notRunning(failed: Bool) }
 @MainActor private final class LiveServer {
     let service: ExplorerService, activity = ActivityStore(), controller: ServerController
     init(service: ExplorerService) {
@@ -52,14 +53,20 @@ private final class ParkedTransport: ClientTransport, Sendable {
             SDKHTTPHost(service: service, activity: activity, runID: id, configuration: try LocalEndpoint(port: 0))
         })
     }
+    /// Building the catalog costs seconds of CPU in debug builds (more on a loaded CI runner), so
+    /// readiness gets the same 120 s bound as LiveStalledShutdownTests. A startup problem is its own
+    /// error, never mistaken for a client transport failure.
     func start() async throws -> ServerEndpoint {
         controller.start()
-        for _ in 0..<1000 {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(120))
+        while ContinuousClock.now < deadline {
             if controller.phase == .running, let endpoint = controller.endpoint { return endpoint }
             if controller.phase == .failed { break }
-            try await Task.sleep(for: .milliseconds(10))
+            try await Task.sleep(for: .milliseconds(20))
         }
-        _ = await controller.stopAndJoin(); throw MCPResearchFailure.transport
+        let failed = controller.phase == .failed
+        _ = await controller.stopAndJoin()
+        throw LiveServerStartup.notRunning(failed: failed)
     }
     func stop() async -> Bool { await controller.stopAndJoin() }
 }
