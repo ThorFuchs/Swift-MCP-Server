@@ -51,7 +51,7 @@ Referee: `@modelcontextprotocol/conformance` 0.2.0-alpha.12 (latest alpha on 202
 |---|---|---|
 | R1 | SwiftNIO early-EOF fix for macOS 27 ([apple/swift-nio#3783](https://github.com/apple/swift-nio/pull/3783), open) | Swift-MCP-Server-HTTP cannot release on a SwiftNIO without it |
 | R2 | Release build of the HTTP fixture fails to link (`NIOHTTPServer.Connection.HTTPProtocol` metadata, swift-http-server) | conformance runs only in debug (slow, 90 s scenario timeout) |
-| R3 | Timing-dependent tests: one Explorer test (`deadlineOfPartialResponseJoinsTask`), `realStdioExampleFragments…` under load, the HTTP listener tests `nativeHTTPStalledWriterClosesAndReleasesTerminalOwnership` and `boundReadinessClosesAcceptedSubscriptionChannelsAndListener(tls:)` under load (2026-11-14), and `eofCancellationAndBrokenOutputSettle` on Linux (a closed output can surface as `CoreFailure.eventOverflow` from the event channel before the transport reports `StdioFailure.brokenPipe`; the transport should report the pipe failure first) | flaky CI hides real failures |
+| R3 | Timing-dependent tests. Core part ([#28](https://github.com/ThorFuchs/Swift-MCP-Server/issues/28)) resolved 2026-11-21: ~~`eofCancellationAndBrokenOutputSettle` on Linux~~ fixed in #43 (the dispatcher reported a failed transport write as `CoreFailure.eventOverflow`; the writer's own error now surfaces), ~~`deadlineOfPartialResponseJoinsTask`~~ fixed in #44 (the Explorer transport returned a raw `URLError(.timedOut)` when the request timeout beat its deadline timer; it now reports `upstreamTimedOut`), ~~`deadlineJoinsUncooperativeCallbackAndBoundsRetainedWork`~~ fixed in #15. Not reproduced, no open evidence: `realStdioExampleFragments…` under load (hypothesis: the 10 s drain after EOF) and the Explorer CI stall of run 43859588228 (candidate: `Process.waitUntilExit()` in three Explorer test helpers); Explorer test output now streams and its CI step is bounded to 20 minutes, so a recurrence names the running test. Still open in Swift-MCP-Server-HTTP: the listener tests `nativeHTTPStalledWriterClosesAndReleasesTerminalOwnership` and `boundReadinessClosesAcceptedSubscriptionChannelsAndListener(tls:)` under load (2026-11-14) | flaky CI hides real failures |
 | R4 | ~~CI access to the private core repository~~ done: HTTP CI fetches it with a read-only token through job-scoped git configuration (HTTP #8) | — |
 | R5 | Linux CI for Swift-MCP-Server-HTTP (only macOS 27 today) | Linux is a supported platform |
 | R6 | Public API review, DocC for every product, semantic-versioning policy, `1.0.0` tag | stable promise |
@@ -113,7 +113,7 @@ basic scope scenarios (HTTP #6); A4 adds step-up with scope union and a step-up 
 1. Done: #16 (client), #17 (Tasks phase C), HTTP #4 (HTTP client), C4 (#19, HTTP #5), S3 (#20), R4 (HTTP #8).
 2. C3: A1–A4 merged (HTTP #6, #7); A5 next, then A6 (with S5).
 3. CS2–CS5 and tag the client's first stable surface (0.x).
-4. R3 and R4 (reliable CI), T-B2.
+4. R3 remainder (the HTTP listener tests; the core part is done, #28), T-B2.
 5. S5, S2b; S4 when Server Cards reach Beta.
 6. R1, R2, R5, R6 and the 1.0 release of the server SDK.
 
