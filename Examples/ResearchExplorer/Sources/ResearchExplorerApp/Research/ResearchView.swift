@@ -14,6 +14,7 @@ struct ResearchView: View {
                     Label(problem.message, systemImage: "exclamationmark.triangle").font(.headline)
                     Text(problem.recovery).foregroundStyle(.secondary)
                     if model.outline != nil { Button("Obtain a new outline") { model.refreshOutline() } }
+                    else if !model.query.isEmpty { Button("Try again") { model.search() } }
                 }.frame(maxWidth: .infinity, alignment: .leading).padding().background(.quaternary)
             }
             if let outline = model.outline { ArticleReaderView(model: model, outline: outline) }
@@ -43,11 +44,10 @@ struct ResearchView: View {
                 ContentUnavailableView {
                     Label("Explore the Riverglass collection", systemImage: "books.vertical")
                 } description: {
-                    Text("Five fictional articles about an observatory that never existed, written as teaching data. Everything stays on this Mac: no network request is made and no server is started.")
+                    Text("Five fictional articles about an observatory that never existed, written as teaching data. Everything stays on this Mac: no network request is made and no server is started.\n\nOr search for observatory, expedition, telescope or catalogue.")
                 } actions: {
                     Button("Explore the offline collection", systemImage: "sparkle.magnifyingglass") { model.exploreOfflineCollection() }
                         .buttonStyle(.borderedProminent).controlSize(.large)
-                    Text("Or search for observatory, expedition, telescope or catalogue.").font(.callout).foregroundStyle(.secondary)
                 }
             } else {
                 ContentUnavailableView("A place to follow your curiosity", systemImage: "book.closed", description: Text("Search English Wikipedia explicitly. Opening an article selects one fetched revision; sections and references use that snapshot. For a no-network tour, choose Offline demo in Server."))
@@ -62,7 +62,6 @@ struct ResearchView: View {
                     if model.isBusy { ProgressView().controlSize(.small) }
                 }.padding(.horizontal, 6)
             }
-            ToolbarItem { Label(model.source.rawValue, systemImage: model.source == .offlineDemo ? "externaldrive" : "globe").foregroundStyle(.secondary).help("Source is selected in Server. Plain text; no images, active HTML or independent source verification.") }
             ToolbarItem {
                 if model.isBusy { Button("Cancel", systemImage: "xmark") { model.cancel() }.keyboardShortcut(.cancelAction) }
                 else { Button("Search", systemImage: "arrow.right") { model.search() }.disabled(model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
