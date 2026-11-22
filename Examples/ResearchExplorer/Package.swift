@@ -19,12 +19,14 @@ let package = Package(
         .package(url: "https://github.com/ThorFuchs/Swift-MCP-Server-HTTP.git", branch: "main"),
         .package(url: "https://github.com/ThorFuchs/Swift-JSON.git", from: "1.9.0"),
         .package(url: "https://github.com/apple/swift-system.git", from: "1.8.1"),
-        .package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.13.9"),
+        // Swift-HTML: source-audited HTML parsing (vendors SwiftSoup source only, with MIT notices).
+        // Pre-1.0, so pinned to the 0.2 minor line whose public DOM traversal the normalizer uses.
+        .package(url: "https://github.com/ThorFuchs/Swift-HTML.git", .upToNextMinor(from: "0.2.0")),
     ],
     targets: [
         .target(name: "ExplorerDomain"),
         .target(name: "WikimediaAccess", dependencies: ["ExplorerDomain",
-            .product(name: "JSON", package: "swift-json"), .product(name: "SwiftSoup", package: "SwiftSoup")],
+            .product(name: "JSON", package: "swift-json"), .product(name: "SwiftHTML", package: "swift-html")],
             resources: [.copy("Fixtures")]),
         .target(name: "ExplorerMCP", dependencies: ["ExplorerDomain", "WikimediaAccess",
             .product(name: "MCPProtocol", package: core), .product(name: "MCPServer", package: core),

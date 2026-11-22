@@ -7,7 +7,7 @@ typed errors, never beta-shape guesses.
 
 Swift-JSON owns JSON parsing/decoding. Positive page/revision Int64 values become
 decimal strings without Double conversion; overflow and duplicate keys are denied.
-SwiftSoup is example-only, MIT-licensed, and isolated in MediaWikiNormalizer. No DOM crosses actors.
+HTML is parsed only in MediaWikiNormalizer, through the public Swift-HTML 0.2 API (which vendors MIT-licensed SwiftSoup source; see THIRD_PARTY_NOTICES.md). Swift-HTML documents and nodes are not Sendable and never leave that actor. The postparse walk is bounded to 100k nodes and depth 128; like the 4 MiB input cap, it does not bound the parser's peak memory or CPU.
 
 Each provider operation has a 15-second total deadline, at most two attempts,
 and only a fitting <=2-second Retry-After on429/503 permits the second attempt.
