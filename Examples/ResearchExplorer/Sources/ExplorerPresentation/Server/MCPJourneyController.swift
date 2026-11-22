@@ -36,7 +36,15 @@ public enum MCPJourneyPhase: String, Sendable { case idle = "Ready", running = "
     public private(set) var passage: SectionPassage?
     public private(set) var references: SectionReferences?
     public private(set) var problem: ExplorerProblem?
+    /// Opt-in exchange inspection for the next run (off by default; locked while a run is active).
+    public private(set) var inspectExchanges = false
+    /// Ignored while a run is active, so a run is either fully inspected or not at all.
+    public func setInspectExchanges(_ enabled: Bool) { guard task == nil else { return }; inspectExchanges = enabled }
+    /// Real SDK exchanges of the latest inspected run: bounded metadata, kept only in memory.
+    public private(set) var exchanges: [ExchangeRecord] = []
+    public private(set) var droppedExchanges = 0
     public var isRunning: Bool { task != nil }
+    @ObservationIgnored private var recorder: ExchangeRecorder?
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private let makeTransport: @Sendable (ServerEndpoint) throws -> any ClientTransport
     @ObservationIgnored private var closed = false
@@ -59,7 +67,14 @@ public enum MCPJourneyPhase: String, Sendable { case idle = "Ready", running = "
             return
         }
         phase = .running; steps = []; serverName = nil; outline = nil; passage = nil; references = nil; problem = nil
-        let makeTransport = self.makeTransport
+        exchanges = []; droppedExchanges = 0
+        let recorder = inspectExchanges ? ExchangeRecorder() : nil
+        self.recorder = recorder
+        let base = self.makeTransport
+        let makeTransport: @Sendable (ServerEndpoint) throws -> any ClientTransport = { endpoint in
+            let transport = try base(endpoint)
+            return recorder.map { InspectingTransport(transport, recorder: $0) } ?? transport
+        }
         task = Task { [weak self] in
             await self?.run(endpoint: endpoint, source: source, makeTransport: makeTransport)
             self?.task = nil
@@ -68,10 +83,17 @@ public enum MCPJourneyPhase: String, Sendable { case idle = "Ready", running = "
     public func cancel() { task?.cancel() }
     /// Cancels and joins; afterwards no client request of this journey is in flight.
     public func cancelAndJoin() async { task?.cancel(); await task?.value }
-    public func shutdown() async { closed = true; await cancelAndJoin() }
+    public func shutdown() async { closed = true; await cancelAndJoin(); clear() }
+    /// Disposes every result and inspector record of past runs (server stop, source switch).
+    public func clear() {
+        guard task == nil else { return }
+        phase = .idle; steps = []; serverName = nil; outline = nil; passage = nil; references = nil; problem = nil
+        exchanges = []; droppedExchanges = 0; recorder = nil
+    }
     public func waitUntilFinished() async { await task?.value }
 
     private func record(_ method: String, _ tool: String?, _ start: ContinuousClock.Instant, revision: String? = nil, error: (any Error)? = nil) {
+        if let recorder { exchanges = recorder.records; droppedExchanges = recorder.dropped }
         guard steps.count < 8 else { return }
         let elapsed = start.duration(to: .now).components
         let ms = Int(elapsed.seconds * 1000 + elapsed.attoseconds / 1_000_000_000_000_000)

@@ -20,7 +20,7 @@ struct ActivityView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text("Activity log").font(.largeTitle.bold())
-            Text("Local research, eligible MCP tool calls and app-owned server lifecycle").foregroundStyle(.secondary)
+            Text("Local research (direct, not MCP), MCP tool-handler calls from any client (external, curl recipe or Explore MCP) and app-owned server lifecycle. Bounded, redacted projections: no arguments, results, headers or credentials.").foregroundStyle(.secondary)
             HStack {
                 Picker("Level", selection: $severity) {
                     Text("All levels").tag(EventSeverity?.none)

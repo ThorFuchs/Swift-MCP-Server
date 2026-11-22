@@ -52,7 +52,7 @@ struct ServerView: View {
                         }
                         HStack { Spacer(); Button("View activity") { lifetime.destination = .activity } }.padding(8)
                     }
-                    Text("Only this app's catalogue handler invocations are observed. Pre-handler transport/schema rejections and connection counts are unavailable. No protocol sessions are inferred.").font(.caption).foregroundStyle(.secondary)
+                    Text("Only this app's catalogue handler invocations are observed, whichever client made them: an external client, a curl recipe or Explore MCP alike. Local Research calls the service directly and is listed separately in Activity. Pre-handler transport/schema rejections and connection counts are unavailable. No protocol sessions are inferred.").font(.caption).foregroundStyle(.secondary)
                 } else { ContentUnavailableView("Server unavailable", systemImage: "exclamationmark.triangle", description: Text(lifetime.startupProblem ?? "The selected SDK host could not be constructed.")) }
             }.padding(28)
         }
@@ -71,16 +71,32 @@ struct ServerView: View {
         VStack(alignment: .leading, spacing: 8) { Label(title, systemImage: icon).foregroundStyle(.secondary); Text(value).font(.title2.bold()).monospacedDigit() }.frame(maxWidth: .infinity, alignment: .leading).accessibilityElement(children: .combine)
     }
     private var connectionDetails: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("Connection details").font(.title2.bold())
-            Text(lifetime.server?.endpoint?.url ?? "Listener not running").font(.body.monospaced()).textSelection(.enabled)
-            Text("MCP 2026-07-28 POST endpoint. Anonymous loopback development only. No legacy initialize/ping, GET stream, session or replay support. HTTPS resource-server authorization is a different SDK configuration.").foregroundStyle(.secondary)
-            Text("The app shares its \(lifetime.profile.rawValue) service with all four tool registrations. Handler-only activity is recorded; client compatibility requires actual requests.").font(.callout)
-            HStack {
-                Button("Copy endpoint", systemImage: "doc.on.doc") { if let text = lifetime.server?.endpoint?.url { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string) } }.disabled(lifetime.server?.endpoint == nil)
-                Spacer(); Button("Done") { showConnection = false }.keyboardShortcut(.defaultAction)
-            }
-        }.padding(28).frame(width: 520)
+        let recipes = lifetime.server?.endpoint.map { ConnectionRecipe.recipes(for: $0, source: lifetime.profile) } ?? []
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Connection details").font(.title2.bold())
+                Text(lifetime.server?.endpoint?.url ?? "Listener not running").font(.body.monospaced()).textSelection(.enabled)
+                Text("MCP 2026-07-28 over Streamable HTTP: one stateless POST per request, with MCP-Protocol-Version and Mcp-Method headers and the protocol version and client capabilities in params._meta. There is no initialize handshake, session, GET stream or replay. Anonymous loopback development access only; browser Origins and Authorization are rejected. This is not a protected resource server.")
+                    .foregroundStyle(.secondary)
+                ForEach(recipes) { recipe in
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(recipe.title).font(.headline)
+                            Spacer()
+                            Button("Copy", systemImage: "doc.on.doc") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(recipe.curl, forType: .string) }
+                        }
+                        Text(recipe.curl).font(.caption.monospaced()).textSelection(.enabled)
+                            .padding(8).frame(maxWidth: .infinity, alignment: .leading).background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 6))
+                    }
+                }
+                Text("These exact requests are executed against a live host in this app's tests. A Swift client uses Client with HTTPClientTransport(endpoint:) from Swift-MCP-Server-HTTP; `research-explorer --mcp-client` is the tested stdio client. Each request reaches the same four tool handlers that Activity counts.")
+                    .font(.callout)
+                HStack {
+                    Button("Copy endpoint", systemImage: "doc.on.doc") { if let text = lifetime.server?.endpoint?.url { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string) } }.disabled(lifetime.server?.endpoint == nil)
+                    Spacer(); Button("Done") { showConnection = false }.keyboardShortcut(.defaultAction)
+                }
+            }.padding(28)
+        }.frame(width: 640, height: 620)
     }
 }
 
@@ -103,6 +119,9 @@ struct MCPJourneyView: View {
                         Button("Explore MCP", systemImage: "arrow.left.arrow.right") { lifetime.exploreMCP() }
                             .disabled(!running).help(running ? "Runs one guided client journey." : "Start the server first; the journey never starts it.")
                     }
+                    Toggle("Record exchange details", isOn: Binding(get: { journey.inspectExchanges }, set: { journey.setInspectExchanges($0) }))
+                        .disabled(journey.isRunning)
+                        .help("Opt-in for the next run: method, tool, byte counts, messages and timing of each real SDK exchange. Kept in memory for this server run only; never exported.")
                     Spacer()
                     Text(journey.phase.rawValue).foregroundStyle(.secondary)
                 }
@@ -116,6 +135,21 @@ struct MCPJourneyView: View {
                         TableColumn("Duration") { step in Text("\(step.milliseconds) ms").monospacedDigit() }
                     }.frame(minHeight: 170)
                     ForEach(journey.steps.compactMap(\.failure), id: \.self) { Label($0, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary) }
+                }
+                if !journey.exchanges.isEmpty {
+                    Text("Exchange inspector · \(journey.exchanges.count) real SDK exchanges\(journey.droppedExchanges > 0 ? " · \(journey.droppedExchanges) not retained" : "")")
+                        .font(.headline)
+                    Table(journey.exchanges) {
+                        TableColumn("#") { Text("\($0.id + 1)").monospacedDigit() }.width(28)
+                        TableColumn("Method") { Text($0.method).font(.callout.monospaced()) }
+                        TableColumn("Tool") { Text($0.tool ?? "—").font(.callout.monospaced()) }
+                        TableColumn("Sent") { Text("\($0.requestBytes) B").monospacedDigit() }
+                        TableColumn("Received") { record in Text("\(record.responseBytes) B in \(record.messages) message\(record.messages == 1 ? "" : "s")").monospacedDigit() }
+                        TableColumn("Outcome") { Text($0.outcome.rawValue) }
+                        TableColumn("Duration") { Text("\($0.milliseconds) ms").monospacedDigit() }
+                    }.frame(minHeight: 200)
+                    Text("Sizes and metadata only: no bodies, arguments, header values or error text are kept. One stateless POST per request; no initialize, no session.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 if let outline = journey.outline {
                     VStack(alignment: .leading, spacing: 6) {

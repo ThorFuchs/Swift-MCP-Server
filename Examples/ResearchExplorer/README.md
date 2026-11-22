@@ -52,7 +52,7 @@ because the HTTP package depends on the core by URL as well.
 - Owned lifetimes: explicit start/stop, cancellation and joined shutdown, no global side effects
 - Bounded live I/O: deadlines, limited retries, size caps, no cookies, credentials or redirect escapes
 
-Design notes: [Architecture](Docs/ARCHITECTURE.md) · [Live Wikipedia contract](Docs/LIVE_CONTRACT.md) · [Riverglass offline collection](Docs/OFFLINE_COLLECTION.md).
+Design notes: [Architecture](Docs/ARCHITECTURE.md) · [MCP walkthrough](Docs/MCP_WALKTHROUGH.md) · [Live Wikipedia contract](Docs/LIVE_CONTRACT.md) · [Riverglass offline collection](Docs/OFFLINE_COLLECTION.md).
 
 ## Tests
 
