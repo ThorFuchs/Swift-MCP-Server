@@ -10,6 +10,11 @@ enum Workspace: String, CaseIterable, Identifiable { case research = "Research",
     var id: String { rawValue }
     var symbol: String { switch self { case .research: "magnifyingglass"; case .server: "server.rack"; case .activity: "waveform.path" } }
 }
+/// A prepared source: its service plus, for the offline demo only, the prepared revision edit.
+struct PreparedSource: Sendable {
+    let service: ExplorerService
+    let offlineEdit: OfflineRevisionEdit?
+}
 @MainActor @Observable final class AppLifetime {
     private(set) var profile: SourceProfile
     let termination = AppTerminationController()
@@ -23,9 +28,10 @@ enum Workspace: String, CaseIterable, Identifiable { case research = "Research",
     @ObservationIgnored private var observation: Task<Void, Never>?
     @ObservationIgnored private var exportTask: Task<Void, Never>?
     @ObservationIgnored private let exportWriter: ActivityExportWriter
-    @ObservationIgnored private let loadService: @Sendable (SourceProfile) async throws -> ExplorerService
+    @ObservationIgnored private let loadSource: @Sendable (SourceProfile) async throws -> PreparedSource
     @ObservationIgnored private let makeHost: @Sendable (ExplorerService, ActivityStore, UUID) throws -> any ExplorerHTTPHost
     private(set) var service: ExplorerService?
+    private(set) var offlineEdit: OfflineRevisionEdit?
     private(set) var research: ResearchController?
     private(set) var startupProblem: String?
     var destination = Workspace.research
@@ -33,13 +39,30 @@ enum Workspace: String, CaseIterable, Identifiable { case research = "Research",
     var isQuitting = false
     weak var mainWindow: NSWindow?
     @ObservationIgnored private var bootstrap: Task<Void, Never>?
-    init(profile: SourceProfile = .wikipediaEnglish,
-         loadService: @escaping @Sendable (SourceProfile) async throws -> ExplorerService = { try await AppResources.loadService(profile: $0) },
-         makeHost: @escaping @Sendable (ExplorerService, ActivityStore, UUID) throws -> any ExplorerHTTPHost = { service, activity, id in
-             SDKHTTPHost(service: service, activity: activity, runID: id, configuration: try LocalEndpoint(port: 8765))
-         }, exportWriter: ActivityExportWriter = ActivityExportWriter()) {
-        self.profile = profile; self.loadService = loadService; self.makeHost = makeHost
+    /// First launch selects the fictional offline collection: no request, no listener (J1).
+    init(profile: SourceProfile = .offlineDemo,
+         loadSource: @escaping @Sendable (SourceProfile) async throws -> PreparedSource = { try await AppResources.loadSource(profile: $0) },
+         makeHost: @escaping @Sendable (ExplorerService, ActivityStore, UUID) throws -> any ExplorerHTTPHost = AppLifetime.defaultHost,
+         exportWriter: ActivityExportWriter = ActivityExportWriter()) {
+        self.profile = profile; self.loadSource = loadSource; self.makeHost = makeHost
         self.exportWriter = exportWriter; activity = ActivityStore()
+    }
+    /// Service-only loader (no offline edit affordance), used by focused lifecycle tests.
+    convenience init(profile: SourceProfile = .offlineDemo,
+                     loadService: @escaping @Sendable (SourceProfile) async throws -> ExplorerService,
+                     makeHost: @escaping @Sendable (ExplorerService, ActivityStore, UUID) throws -> any ExplorerHTTPHost = AppLifetime.defaultHost,
+                     exportWriter: ActivityExportWriter = ActivityExportWriter()) {
+        self.init(profile: profile, loadSource: { PreparedSource(service: try await loadService($0), offlineEdit: nil) },
+                  makeHost: makeHost, exportWriter: exportWriter)
+    }
+    nonisolated static func defaultHost(_ service: ExplorerService, _ activity: ActivityStore, _ id: UUID) throws -> any ExplorerHTTPHost {
+        SDKHTTPHost(service: service, activity: activity, runID: id, configuration: try LocalEndpoint(port: 8765))
+    }
+    private func makeResearch(_ service: ExplorerService, source: SourceProfile, edit: OfflineRevisionEdit?) -> ResearchController {
+        let activity = self.activity
+        return ResearchController(client: service, source: source, record: { op, ok in
+            await activity.localResearch(op, success: ok, profile: service.profile)
+        }, offlineEdit: edit)
     }
     func waitUntilPrepared() async { await bootstrap?.value }
     func waitUntilExportSettled() async { await exportTask?.value }
@@ -51,10 +74,11 @@ enum Workspace: String, CaseIterable, Identifiable { case research = "Research",
         bootstrap = Task { [self] in
             defer { bootstrap = nil }
             do {
-                let service = try await loadService(profile)
+                let prepared = try await loadSource(profile)
                 try Task.checkCancellation()
-                self.service = service
-                research = ResearchController(client: service, source: profile, record: { operation, success in await activity.localResearch(operation, success: success, profile: service.profile) })
+                let service = prepared.service
+                self.service = service; offlineEdit = prepared.offlineEdit
+                research = makeResearch(service, source: profile, edit: prepared.offlineEdit)
                 server = ServerController(activity: activity, factory: { runID in
                     try makeHost(service, activity, runID)
                 })
@@ -79,12 +103,11 @@ enum Workspace: String, CaseIterable, Identifiable { case research = "Research",
         bootstrap = Task { [self] in
             await research?.shutdown() // keep the old owner until its actual join
             do {
-                let selected = try await loadService(profile)
+                let prepared = try await loadSource(profile)
                 try Task.checkCancellation()
-                self.profile = profile; service = selected
-                research = ResearchController(client: selected, source: profile, record: { [activity] op, ok in
-                    await activity.localResearch(op, success: ok, profile: profile)
-                })
+                let selected = prepared.service
+                self.profile = profile; service = selected; offlineEdit = prepared.offlineEdit
+                research = makeResearch(selected, source: profile, edit: prepared.offlineEdit)
                 server = ServerController(activity: activity, factory: { [activity, makeHost] id in
                     try makeHost(selected, activity, id)
                 })
@@ -92,11 +115,7 @@ enum Workspace: String, CaseIterable, Identifiable { case research = "Research",
                 startupProblem = "Source handoff failed. The old source was not relabelled."
                 // The old driver joined before handoff. A failed construction
                 // must not leave its retained service with a closed controller.
-                if let service {
-                    research = ResearchController(client: service, source: self.profile, record: { [activity] op, ok in
-                        await activity.localResearch(op, success: ok, profile: service.profile)
-                    })
-                }
+                if let service { research = makeResearch(service, source: self.profile, edit: offlineEdit) }
             }
             bootstrap = nil; isQuitting = false
         }
@@ -135,11 +154,7 @@ enum Workspace: String, CaseIterable, Identifiable { case research = "Research",
             return true
         }, recover: { [self] in
             // Called only after the old Research driver actually joined.
-            if let service {
-                research = ResearchController(client: service, source: profile, record: { [activity] op, ok in
-                    await activity.localResearch(op, success: ok, profile: service.profile)
-                })
-            }
+            if let service { research = makeResearch(service, source: profile, edit: offlineEdit) }
             isQuitting = false
             if service == nil { startupProblem = nil; prepare() } else { observe() }
         })
@@ -185,12 +200,14 @@ struct WindowReference: NSViewRepresentable {
 /// Finite file/parser startup on its own actor, not the UI executor.
 private actor AppResources {
     static let shared = AppResources()
-    static func loadService(profile: SourceProfile) async throws -> ExplorerService { try await shared.load(profile: profile) }
-    private func load(profile: SourceProfile) throws -> ExplorerService {
+    static func loadSource(profile: SourceProfile) async throws -> PreparedSource { try await shared.load(profile: profile) }
+    private func load(profile: SourceProfile) throws -> PreparedSource {
         try Task.checkCancellation()
         switch profile {
-        case .offlineDemo: return ExplorerService(provider: try FixtureProvider.load(), limits: try ExplorerLimits())
-        case .wikipediaEnglish: return ExplorerService(provider: WikipediaProvider(), limits: try ExplorerLimits())
+        case .offlineDemo:
+            let provider = try FixtureProvider.load()
+            return .init(service: ExplorerService(provider: provider, limits: try ExplorerLimits()), offlineEdit: .prepared(provider))
+        case .wikipediaEnglish: return .init(service: ExplorerService(provider: WikipediaProvider(), limits: try ExplorerLimits()), offlineEdit: nil)
         }
     }
 }

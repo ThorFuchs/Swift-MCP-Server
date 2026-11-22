@@ -26,13 +26,17 @@ swift run --package-path Examples/ResearchExplorer research-explorer --stdio
 # Human-readable walkthrough of the same four tools
 swift run --package-path Examples/ResearchExplorer research-explorer --walkthrough
 
-# macOS app: Research / Server / Activity, live Wikipedia (enwiki) or Offline demo
+# macOS app: Research / Server / Activity, Offline demo (default) or live Wikipedia (enwiki)
 swift run --package-path Examples/ResearchExplorer ResearchExplorerApp
 ```
 
-The app starts with zero network requests. Its **Server** tab starts a loopback Streamable HTTP
-MCP endpoint (via Swift-MCP-Server-HTTP) serving the same four tools; **Activity** shows
-per-tool counters. Riverglass content is fictional teaching data, not Wikimedia responses.
+The app starts with zero network requests and opens on the **Offline demo**: five fictional
+Riverglass articles with sections, references and two revisions of one article. **Explore the
+offline collection** runs a one-click tour; **Check for a newer revision** compares a pinned revision
+with the latest one explicitly. See [the Riverglass collection](Docs/OFFLINE_COLLECTION.md).
+Wikipedia English is chosen explicitly in **Server**, which also starts a loopback Streamable HTTP
+MCP endpoint (via Swift-MCP-Server-HTTP) serving the same four tools; **Activity** shows per-tool
+counters. Riverglass content is original fictional teaching data, not Wikimedia responses.
 
 The example resolves Swift-MCP-Server and Swift-MCP-Server-HTTP by URL (`main` until 1.0),
 because the HTTP package depends on the core by URL as well.
@@ -44,7 +48,7 @@ because the HTTP package depends on the core by URL as well.
 - Owned lifetimes: explicit start/stop, cancellation and joined shutdown, no global side effects
 - Bounded live I/O: deadlines, limited retries, size caps, no cookies, credentials or redirect escapes
 
-Design notes: [Architecture](Docs/ARCHITECTURE.md) · [Live Wikipedia contract](Docs/LIVE_CONTRACT.md).
+Design notes: [Architecture](Docs/ARCHITECTURE.md) · [Live Wikipedia contract](Docs/LIVE_CONTRACT.md) · [Riverglass offline collection](Docs/OFFLINE_COLLECTION.md).
 
 ## Tests
 

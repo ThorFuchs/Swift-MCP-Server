@@ -1,0 +1,36 @@
+{
+  "fixture_kind": "synthetic_normalized_example_not_upstream_payload",
+  "format_version": "wre-fixture-1",
+  "project": "fixture-enwiki",
+  "page_id": "lanterns",
+  "revision_id": "r1",
+  "title": "Riverglass Lantern Survey",
+  "source_url": "fixture://riverglass/lanterns/r1",
+  "normalizer_version": "fixture-1",
+  "license": "Apache-2.0 (original fictional teaching text, Research Explorer)",
+  "modified_at": "2026-01-30T10:00:00Z",
+  "parts": [
+    {
+      "id": "p1",
+      "heading": "Overview",
+      "text": "The Riverglass Lantern Survey is a fictional 1911 count of the shaded lamps used along the Tamsel ferry landings, made to measure how much stray light reached the observatory. This article deliberately supplies no reference metadata at all, so Research Explorer reports the references as missing rather than as an empty list.",
+      "citations": [
+        "ref-survey-report"
+      ]
+    },
+    {
+      "id": "p2",
+      "heading": "Method",
+      "text": "Two apprentices walked the landings on twelve nights and recorded every lamp visible from the east dome, noting its colour and whether it was shaded.",
+      "citations": [
+        "ref-survey-report"
+      ]
+    },
+    {
+      "id": "p3",
+      "heading": "Outcome",
+      "text": "The society asked the ferry company to shade its brightest lamps, and the company agreed in exchange for an earlier time signal on winter evenings.",
+      "citations": []
+    }
+  ]
+}

@@ -7,63 +7,140 @@
   "title": "Riverglass Observatory",
   "source_url": "fixture://riverglass/observatory/r1",
   "normalizer_version": "fixture-1",
-  "license": "Apache-2.0 (synthetic example data)",
+  "license": "Apache-2.0 (original fictional teaching text, Research Explorer)",
+  "modified_at": "2026-03-14T09:00:00Z",
   "parts": [
     {
       "id": "p1",
       "heading": "Overview",
-      "text": "Riverglass Observatory is a fictional teaching dataset.",
-      "citations": []
+      "text": "Riverglass Observatory is a fictional research observatory on the Tamsel bluffs above the river town of Riverglass. It was written as original teaching data for Research Explorer: none of its people, places, instruments or measurements exist. In the story of the collection, the observatory was founded in 1887 by the Riverglass Philosophical Society and became known for its meridian telescope, the Ostmere expedition of 1928 and a sixty-year record of tide-star observations.",
+      "citations": [
+        "ref-society-minutes"
+      ]
     },
     {
       "id": "p2",
       "heading": "Telescope",
-      "text": "The fictional telescope uses a 2-metre mirror.",
+      "text": "The observatory's principal instrument is the Riverglass Meridian Circle, a 2-metre reflecting telescope mounted to swing only along the local meridian. It was built by the Halden Instrument Works and installed in the east dome in 1889. Because the tube can only rise and fall, observers timed each star as it crossed a set of fine wires, which made the instrument well suited to the long, regular programme of tide-star timings for which Riverglass is remembered.",
       "citations": [
-        "ref-1"
+        "ref-instrument-notes"
       ],
       "parts": [
         {
           "id": "p2-1",
           "heading": "Calibration",
-          "text": "Calibration includes a Unicode target: α — π.",
+          "text": "Each season began with a calibration night. Observers measured the collimation error against two marks on the far riverbank and recorded the result in a ledger using Greek letters for the correction terms, for example α — π for the azimuth pair. The original calibration ledger was lost in the flood of 1952, so this citation remains unresolved in every revision of the article.",
           "citations": [
-            "ref-unresolved"
+            "ref-lost-ledger"
           ]
         }
       ]
     },
     {
       "id": "p3",
+      "heading": "History",
+      "text": "The Philosophical Society debated the site for three years before choosing the bluffs, where the river fog usually settles below the domes. Construction was funded by subscription and by the sale of the society's fossil collection.",
+      "citations": [
+        "ref-society-minutes"
+      ],
+      "parts": [
+        {
+          "id": "p3-1",
+          "heading": "Founding",
+          "text": "The founding charter of 1887 named three purposes: to keep accurate local time for the river ferries, to train apprentices from the town, and to publish observations openly. The first director, Aurelio Brandt, insisted that every measurement be printed together with the name of the observer who made it.",
+          "citations": [
+            "ref-society-minutes"
+          ]
+        },
+        {
+          "id": "p3-2",
+          "heading": "Flood of 1952",
+          "text": "In March 1952 the Tamsel rose eleven metres and flooded the lower archive. Most printed catalogues survived in the upper library, but several handwritten ledgers were destroyed, which explains the gaps that later historians found in the calibration records.",
+          "citations": [
+            "ref-flood-report"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "p4",
       "heading": "Expeditions",
-      "text": "The fictional expedition compared two readings.",
+      "text": "The observatory's best-known field campaign was the Riverglass Expedition of 1928, which carried a portable transit instrument across the Ostmere salt flats. The expedition compared two readings of the same star taken forty kilometres apart, and the disagreement between them is still discussed in the collection's article on the expedition.",
+      "citations": [
+        "ref-expedition-journal"
+      ]
+    },
+    {
+      "id": "p5",
+      "heading": "Research programme",
+      "text": "From 1903 to 1963 the observatory timed a fixed list of bright stars, nicknamed tide-stars because ferry pilots used the published times to plan night crossings. The results were issued as the Tide-Star Catalogue. The programme ended when radio time signals made the local service unnecessary.",
+      "citations": [
+        "ref-tide-star-catalogue"
+      ]
+    },
+    {
+      "id": "p6",
+      "heading": "See also",
+      "text": "Riverglass Meridian Circle; Riverglass Expedition of 1928; Riverglass Tide-Star Observations; Riverglass Lantern Survey.",
       "citations": []
     }
   ],
   "references": [
     {
-      "id": "ref-1",
-      "title": "Fictional Riverglass Instrument Notes",
+      "id": "ref-society-minutes",
+      "title": "Riverglass Philosophical Society. Minutes of the Founding Meetings, 1885–1888. (fictional)",
+      "url": "fixture://riverglass/references/society-minutes",
+      "synthetic": true
+    },
+    {
+      "id": "ref-instrument-notes",
+      "title": "Halden Instrument Works. Riverglass Meridian Circle: Instrument Notes. Riverglass, 1889. (fictional)",
       "url": "fixture://riverglass/references/instrument-notes",
+      "synthetic": true
+    },
+    {
+      "id": "ref-flood-report",
+      "title": "Tamsel Valley Board. Report on the Flood of March 1952. (fictional)",
+      "url": "fixture://riverglass/references/flood-report",
+      "synthetic": true
+    },
+    {
+      "id": "ref-expedition-journal",
+      "title": "Ines Varga and Tobiah Lusk. Journal of the Ostmere Expedition, 1928. (fictional)",
+      "url": "fixture://riverglass/references/expedition-journal",
+      "synthetic": true
+    },
+    {
+      "id": "ref-tide-star-catalogue",
+      "title": "Riverglass Observatory. The Tide-Star Catalogue, editions 1–6, 1903–1963. (fictional)",
+      "url": "fixture://riverglass/references/tide-star-catalogue",
       "synthetic": true
     }
   ],
   "tables": [
     {
-      "id": "table-1",
-      "caption": "Synthetic mirror comparison",
+      "id": "table-instruments",
+      "caption": "Principal instruments (fictional)",
       "columns": [
         "Instrument",
-        "Diameter (m)"
+        "Aperture (mm)",
+        "Installed"
       ],
       "rows": [
         [
-          "Riverglass",
-          2
+          "Meridian Circle",
+          2000,
+          1889
         ],
         [
-          "Hillglass",
-          1
+          "Ferry clock transit",
+          75,
+          1891
+        ],
+        [
+          "Ostmere portable transit",
+          60,
+          1927
         ]
       ]
     }

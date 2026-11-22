@@ -1,0 +1,97 @@
+{
+  "fixture_kind": "synthetic_normalized_example_not_upstream_payload",
+  "format_version": "wre-fixture-1",
+  "project": "fixture-enwiki",
+  "page_id": "instrument",
+  "revision_id": "r1",
+  "title": "Riverglass Meridian Circle",
+  "source_url": "fixture://riverglass/instrument/r1",
+  "normalizer_version": "fixture-1",
+  "license": "Apache-2.0 (original fictional teaching text, Research Explorer)",
+  "modified_at": "2026-02-20T08:40:00Z",
+  "parts": [
+    {
+      "id": "p1",
+      "heading": "Overview",
+      "text": "The Riverglass Meridian Circle is the fictional main telescope of Riverglass Observatory, a large reflecting instrument that can only point along the north–south meridian. It was designed for timing star transits rather than for viewing faint objects. This article is original teaching text and describes no real instrument.",
+      "citations": [
+        "ref-instrument-notes"
+      ]
+    },
+    {
+      "id": "p2",
+      "heading": "Design",
+      "text": "The Halden Instrument Works offered the design in its 1886 trade catalogue as a meridian reflector of unusual size. The society chose it because a single fixed axis was easier to keep stable on the clay of the bluffs than a fully steerable mount.",
+      "citations": [
+        "ref-works-catalogue"
+      ],
+      "parts": [
+        {
+          "id": "p2-1",
+          "heading": "Mirror and tube",
+          "text": "The mirror was cast in three attempts at the Halden foundry and figured by hand over fourteen months. Its diameter was published as two metres at installation; a remeasurement in 1931 suggested a larger figure, a correction later adopted in the observatory article.",
+          "citations": [
+            "ref-instrument-notes",
+            "ref-remeasurement-1931"
+          ]
+        },
+        {
+          "id": "p2-2",
+          "heading": "Clock drive",
+          "text": "A weight-driven clock in the pier rang a bell every second so that observers could count while watching the wires. The bell could be heard from the ferry landing on still nights.",
+          "citations": [
+            "ref-instrument-notes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "p3",
+      "heading": "Calibration procedure",
+      "text": "Observers corrected for three small errors before each season: level, collimation and azimuth. The azimuth correction was written with Greek letters in the ledgers, and the typical residual after calibration was θ ≈ 0.25″, small enough for the ferry time service.",
+      "citations": [
+        "ref-instrument-notes"
+      ]
+    },
+    {
+      "id": "p4",
+      "heading": "Later modifications",
+      "text": "In 1934 the original wires were replaced with etched glass, and in 1958 an electric drive replaced the weights. The bell was kept for visitors.",
+      "citations": []
+    },
+    {
+      "id": "p5",
+      "heading": "Preservation",
+      "text": "The Meridian Circle has not been used for research since 1963. It remains in the east dome, which the town opens to visitors on the longest night of the year.",
+      "citations": [
+        "ref-archive-guide"
+      ]
+    }
+  ],
+  "references": [
+    {
+      "id": "ref-instrument-notes",
+      "title": "Halden Instrument Works. Riverglass Meridian Circle: Instrument Notes. Riverglass, 1889. (fictional)",
+      "url": "fixture://riverglass/references/instrument-notes",
+      "synthetic": true
+    },
+    {
+      "id": "ref-works-catalogue",
+      "title": "Halden Instrument Works. Trade Catalogue of Astronomical Instruments, 1886. (fictional)",
+      "url": "fixture://riverglass/references/works-catalogue",
+      "synthetic": true
+    },
+    {
+      "id": "ref-remeasurement-1931",
+      "title": "Halden Instrument Works. Aperture Remeasurement of the Riverglass Mirror, 1931. (fictional)",
+      "url": "fixture://riverglass/references/remeasurement-1931",
+      "synthetic": true
+    },
+    {
+      "id": "ref-archive-guide",
+      "title": "Riverglass Town Archive. Guide to the Observatory Papers, 2004. (fictional)",
+      "url": "fixture://riverglass/references/archive-guide",
+      "synthetic": true
+    }
+  ]
+}

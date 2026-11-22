@@ -67,7 +67,9 @@ struct ProviderTests {
         await p.setFault(.timedOut)
         await expectProblem(.upstreamTimedOut) { _ = try await s.search(.init(query: "Riverglass", project: "fixture-enwiki", limit: nil)) }
         await p.setFault(.none)
-        await expectProblem(.absentPage) { _ = try await s.outline(.init(project: "fixture-enwiki", candidateID: "fixture-expedition")) }
+        // Absent page needs the explicitly test-only negative candidate; shipped results all resolve.
+        let negative = ExplorerService(provider: try FixtureProvider.load(includeTestOnlyNegativeCandidate: true), limits: try ExplorerLimits())
+        await expectProblem(.absentPage) { _ = try await negative.outline(.init(project: "fixture-enwiki", candidateID: FixtureProvider.testOnlyNegativeCandidate.id)) }
         await expectProblem(.unknownCandidate) { _ = try await s.outline(.init(project: "fixture-enwiki", candidateID: "missing")) }
         await expectProblem(.projectNotAllowed) { _ = try await s.search(.init(query: "Riverglass", project: "enwiki", limit: nil)) }
     }
@@ -111,9 +113,9 @@ struct ProviderTests {
         await expectProblem(.budgetExceeded) { _ = try await s.search(query) }
         a.cancel(); p.release()
         do { _ = try await a.value; Issue.record("Cancelled provider result must not escape") } catch is CancellationError { }
-        #expect(try await b.value.candidates.count == 2)
+        #expect(try await b.value.candidates.count == 5)
         // Join completed above; a new call is independently admitted.
-        #expect(try await s.search(query).candidates.count == 2)
+        #expect(try await s.search(query).candidates.count == 5)
         } catch {
             a.cancel(); b.cancel(); p.release(); _ = await a.result; _ = await b.result
             throw error
