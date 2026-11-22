@@ -31,12 +31,13 @@ struct ServerView: View {
                             }
                             Spacer()
                             if server.canStart { Button("Start server", systemImage: "play.fill") { lifetime.startServer() }.buttonStyle(.borderedProminent) }
-                            else { Button("Stop server", systemImage: "stop.fill") { server.stop() }.disabled(!server.canStop) }
+                            else { Button("Stop server", systemImage: "stop.fill") { lifetime.stopServer() }.disabled(!server.canStop) }
                             Button("Restart") { server.restart() }.disabled(server.phase != .running)
                             Button("Connection details", systemImage: "doc.on.doc") { showConnection = true }.disabled(server.endpoint == nil)
                         }.padding(12)
                     }
                     Text("Local development access. Host is checked; browser Origins and supplied Authorization are rejected. Not a public or protected-resource endpoint.").font(.callout).foregroundStyle(.secondary)
+                    MCPJourneyView(lifetime: lifetime, journey: lifetime.journey, running: server.phase == .running)
                     summaries
                     RequestActivityChart(snapshot: lifetime.activitySnapshot)
                     GroupBox("Recent eligible tool calls") {
@@ -80,5 +81,51 @@ struct ServerView: View {
                 Spacer(); Button("Done") { showConnection = false }.keyboardShortcut(.defaultAction)
             }
         }.padding(28).frame(width: 520)
+    }
+}
+
+/// "Explore MCP": a real public-SDK client (Client + HTTPClientTransport) calls this app's own
+/// loopback server. Only metadata is shown in the timeline; the tool calls appear in Activity.
+struct MCPJourneyView: View {
+    @Bindable var lifetime: AppLifetime
+    let journey: MCPJourneyController
+    let running: Bool
+    var body: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("A real MCP client in this app connects to the server above over loopback HTTP: server/discover, tools/list, then the four tools. Results are checked against each tool's outputSchema and the requested revision. Nothing is sent until you press Explore MCP.")
+                    .font(.callout).foregroundStyle(.secondary)
+                HStack {
+                    if journey.isRunning {
+                        Button("Cancel", systemImage: "xmark") { journey.cancel() }
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Button("Explore MCP", systemImage: "arrow.left.arrow.right") { lifetime.exploreMCP() }
+                            .disabled(!running).help(running ? "Runs one guided client journey." : "Start the server first; the journey never starts it.")
+                    }
+                    Spacer()
+                    Text(journey.phase.rawValue).foregroundStyle(.secondary)
+                }
+                if !journey.steps.isEmpty {
+                    Table(journey.steps) {
+                        TableColumn("Method") { Text($0.method).font(.callout.monospaced()) }
+                        TableColumn("Tool") { Text($0.tool ?? "—").font(.callout.monospaced()) }
+                        TableColumn("Status") { step in Text(step.status.rawValue) }
+                        TableColumn("Validated") { step in Text(step.validated ? "Schema + identity" : "No") }
+                        TableColumn("Revision") { step in Text(step.revisionID ?? "—") }
+                        TableColumn("Duration") { step in Text("\(step.milliseconds) ms").monospacedDigit() }
+                    }.frame(minHeight: 170)
+                    ForEach(journey.steps.compactMap(\.failure), id: \.self) { Label($0, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary) }
+                }
+                if let outline = journey.outline {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(outline.provenance.title).font(.headline)
+                        Text("Revision \(outline.snapshot.revisionID) · \(outline.snapshot.provider) · \(outline.provenance.synthetic ? "fictional" : "fetched snapshot")").font(.caption).foregroundStyle(.secondary)
+                        if let passage = journey.passage { Text(passage.text).lineLimit(6).textSelection(.enabled) }
+                        if let refs = journey.references { Text("\(refs.references.count) references, \(refs.unresolvedIDs.count) unresolved · not independently verified").font(.caption).foregroundStyle(.secondary) }
+                    }
+                }
+            }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
+        } label: { Label("Guided MCP journey", systemImage: "point.3.connected.trianglepath.dotted") }
     }
 }

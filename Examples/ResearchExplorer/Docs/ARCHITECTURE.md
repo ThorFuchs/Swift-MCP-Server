@@ -29,3 +29,24 @@ exhaustive HTTP request/connection/session claim. Local Research never enters th
 
 The Research view can use live Wikipedia (enwiki) or the fictional Riverglass collection,
 labelled Offline demo. Live errors never fall back to fictional content.
+
+## Real MCP clients (RE-02)
+
+`MCPResearchClient` (ExplorerMCP) adapts the public SDK `Client` to the same `ResearchClient`
+operations as `ExplorerService`. `prepare()` runs `server/discover` and every `tools/list` page and
+requires all four tools with an `outputSchema`, so the SDK validates each `structuredContent` before
+the adapter sees it; calls before `prepare()` fail with `notPrepared` and send nothing. The adapter
+then decodes the `{status, value | problem}` envelope strictly and checks that each result names the
+snapshot and part that was asked for. Tool problems are rethrown as the owned `ExplorerProblem`
+(re-derived from the code, never server text); JSON-RPC rejections, invalid responses, identity
+mismatches and transport failures are separate `MCPResearchFailure` cases.
+
+- **App, HTTP:** Server → *Explore MCP* is enabled only while this app's server runs. One
+  `MCPJourneyController` task uses `HTTPClientTransport` against the announced loopback endpoint and
+  records a finite (≤ 8 steps) metadata-only timeline. Stop cancels the journey first; Quit and a
+  source switch cancel and join it. The tool calls reach Activity through the existing handler
+  observer only; the journey adds no events of its own.
+- **CLI, stdio:** `research-explorer --mcp-client` launches itself as `--stdio` with
+  `StdioClientTransport`, runs the same journey, closes the child's input and joins `run()`; on
+  failure it cancels the run (SIGTERM, SIGKILL after 2 s) and joins. `--walkthrough` stays the
+  in-process path and says *DIRECT (not MCP)*.

@@ -1,5 +1,5 @@
 {
-  "originHash" : "8bff508599f84fdece6c7d52c84b8044467204f3c13f19eeb7f91141248bfa1c",
+  "originHash" : "69d5995d4c8536f4eb9ef4f549db99efe2524adbd1f83c469832350cc2b7aa07",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -78,8 +78,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-crypto.git",
       "state" : {
-        "revision" : "f8fad2f95ad67b45f6340c0960e2396094d67e07",
-        "version" : "5.1.1"
+        "revision" : "da9d28d69ebe3894b18376c8f2395c2f37b8448f",
+        "version" : "4.5.2"
       }
     },
     {
@@ -159,7 +159,7 @@
       "location" : "https://github.com/ThorFuchs/Swift-MCP-Server.git",
       "state" : {
         "branch" : "main",
-        "revision" : "92d39745de13f0112c4bf0f7399c92c46de4c128"
+        "revision" : "fbe974c23a676488d88d7779e92ab43e3d159819"
       }
     },
     {
@@ -168,7 +168,7 @@
       "location" : "https://github.com/ThorFuchs/Swift-MCP-Server-HTTP.git",
       "state" : {
         "branch" : "main",
-        "revision" : "62401ae05102517d4671bf885a867334e94c40d3"
+        "revision" : "4d3243e93a1768bfc879ede098f7a92e1940bccf"
       }
     },
     {
@@ -250,6 +250,24 @@
       "state" : {
         "revision" : "a18ee16b8039866fd919bdb4e8e906882d4ecc75",
         "version" : "2.13.0"
+      }
+    },
+    {
+      "identity" : "swift-sqlite",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ThorFuchs/Swift-SQLite.git",
+      "state" : {
+        "revision" : "3a9eba0e60860c0e663c706ca92b654c514ac64d",
+        "version" : "1.1.0"
+      }
+    },
+    {
+      "identity" : "swift-subprocess",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-subprocess.git",
+      "state" : {
+        "revision" : "dbe21bd7dfd4ffef8c32588918542a8abfa1b54c",
+        "version" : "1.0.2"
       }
     },
     {

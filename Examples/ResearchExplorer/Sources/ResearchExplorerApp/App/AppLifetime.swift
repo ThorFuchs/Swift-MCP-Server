@@ -18,7 +18,9 @@ struct PreparedSource: Sendable {
 @MainActor @Observable final class AppLifetime {
     private(set) var profile: SourceProfile
     let termination = AppTerminationController()
-    var canSwitchSource: Bool { !isQuitting && !termination.unsettled && bootstrap == nil && server?.phase == .stopped && server?.cleanupDebt == false }
+    var canSwitchSource: Bool { !isQuitting && !termination.unsettled && bootstrap == nil && server?.phase == .stopped && server?.cleanupDebt == false && !journey.isRunning }
+    /// The guided "Explore MCP" client journey against this app's own running server.
+    let journey = MCPJourneyController()
     let activity: ActivityStore
     var activitySnapshot = ActivitySnapshot.empty
     private(set) var server: ServerController?
@@ -97,10 +99,18 @@ struct PreparedSource: Sendable {
         }
     }
     func startServer() { guard !isQuitting, !termination.unsettled else { return }; server?.start() }
+    /// A client journey never outlives its server: cancel it first (it joins promptly, the
+    /// server drain closes any remaining exchange).
+    func stopServer() { journey.cancel(); server?.stop() }
+    func exploreMCP() {
+        guard !isQuitting, !termination.unsettled else { return }
+        journey.start(endpoint: server?.endpoint, running: server?.phase == .running, source: profile)
+    }
     func selectSource(_ profile: SourceProfile) {
         guard profile != self.profile, canSwitchSource else { return }
         isQuitting = true // quiesces every mutating UI action during handoff
         bootstrap = Task { [self] in
+            await journey.cancelAndJoin()
             await research?.shutdown() // keep the old owner until its actual join
             do {
                 let prepared = try await loadSource(profile)
@@ -146,6 +156,7 @@ struct PreparedSource: Sendable {
         isQuitting = true
         let clean = await termination.request(waitMilliseconds: waitMilliseconds, settle: { [self] in
             bootstrap?.cancel(); await bootstrap?.value
+            await journey.cancelAndJoin() // client requests end before the server stops
             await research?.shutdown()
             exportTask?.cancel(); await exportTask?.value
             let serverClean = await server?.stopAndJoin() ?? true
