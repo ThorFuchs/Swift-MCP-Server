@@ -104,7 +104,7 @@ private enum Frames {
         let references = try Frames.value(SectionReferences.self, await child.exchange(Frames.call("get_section_references",
             ReferencesInput(snapshot: outline.snapshot, part: location), id: 5)))
         #expect(passage.snapshot == location.snapshot && passage.text.contains("α — π"))
-        #expect(references.references.map(\.id) == ["ref-1"] && references.unresolvedIDs == ["ref-unresolved"])
+        #expect(references.references.map(\.id) == ["ref-instrument-notes"] && references.unresolvedIDs == ["ref-lost-ledger"])
 
         // EOF on stdin ends the server cleanly: no extra frames, no diagnostics.
         let end = try await child.finish()

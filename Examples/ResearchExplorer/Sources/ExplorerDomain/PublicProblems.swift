@@ -6,7 +6,7 @@ public enum PublicProblems {
         case .invalidArguments: .init(code, "Arguments exceed the operation contract.", recovery: "Use the documented fields and limits.")
         case .projectNotAllowed: .init(code, "Project is not enabled.", recovery: "Use fixture-enwiki.")
         case .unknownCandidate: .init(code, "Candidate is unknown.", recovery: "Search again and choose a returned candidate ID.")
-        case .absentPage: .init(code, "No article seed exists for this candidate.", recovery: "Choose fixture-observatory.")
+        case .absentPage: .init(code, "No article seed exists for this candidate.", recovery: "Choose another returned candidate; missing data is not an empty article.")
         case .absentSnapshot: .init(code, "Exact snapshot is absent or expired.", recovery: "Obtain a new outline and reuse its complete locator.")
         case .absentSection: .init(code, "Part is absent from this revision.", recovery: "Choose a part from this exact outline.")
         case .revisionMismatch: .init(code, "Snapshot and part identities differ.", recovery: "Use identities from the same outline.")

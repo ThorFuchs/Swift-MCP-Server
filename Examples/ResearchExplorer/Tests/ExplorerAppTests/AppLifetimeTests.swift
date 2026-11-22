@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import Foundation
 import Testing
+import Synchronization
 import ExplorerDomain
 import WikimediaAccess
 import ExplorerPresentation
@@ -50,6 +51,28 @@ private actor FailingAppHost: ExplorerHTTPHost {
 }
 
 @Suite @MainActor struct AppLifetimeTests {
+    /// RE-01 (#33) / J1: first launch prepares only the offline collection, makes no live request,
+    /// constructs no listener, and offers the one-click tour plus the prepared offline edit.
+    @Test func firstLaunchPreparesOfflineCollectionWithoutListenerOrLiveSource() async throws {
+        let requested = Mutex<[SourceProfile]>([]), hosts = Mutex(0)
+        let provider = try FixtureProvider.load()
+        let app = AppLifetime(loadSource: { profile in
+            requested.withLock { $0.append(profile) }
+            guard profile == .offlineDemo else { throw ExplorerProblem(.upstreamUnavailable, "live source must not load", recovery: "") }
+            return PreparedSource(service: ExplorerService(provider: provider, limits: try ExplorerLimits()), offlineEdit: .prepared(provider))
+        }, makeHost: { _, _, _ in hosts.withLock { $0 += 1 }; throw HostFailure.stopFailed })
+        try await withApp(app) {
+            #expect(app.profile == .offlineDemo, "the default source is the fictional offline demo")
+            app.prepare(); await app.waitUntilPrepared()
+            let research = try #require(app.research)
+            #expect(requested.withLock { $0 } == [.offlineDemo] && app.startupProblem == nil)
+            #expect(app.server?.phase == .stopped && hosts.withLock { $0 } == 0, "no listener is constructed at launch")
+            #expect(research.source == .offlineDemo && research.offlineEdit != nil && research.phase == .idle)
+            research.exploreOfflineCollection(); await research.waitUntilIdle()
+            #expect(research.outline?.provenance.synthetic == true && research.citations != nil)
+            #expect(requested.withLock { $0 } == [.offlineDemo] && hosts.withLock { $0 } == 0)
+        }
+    }
     @Test func actualAppQuitRetainsHeldResearchThenRecoversAndRetries() async throws {
         let hold = Hold(), base = try FixtureProvider.load()
         let service = ExplorerService(provider: AppHeldProvider(base: base, hold: hold), limits: try ExplorerLimits())
