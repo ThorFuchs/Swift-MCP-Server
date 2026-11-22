@@ -25,14 +25,8 @@ jobs:
           persist-credentials: false
       - run: swift --version
       - run: Scripts/test.sh
-      # The example resolves the core by URL (main), so it checks the example itself against
-      # the published core, not this checkout's core sources.
-      - name: Research Explorer tests
-        # A complete run (build + tests) takes about 3 minutes. Bound the step so a
-        # stall fails here, with the streamed per-test output above it, instead of
-        # consuming the job's budget (#28).
-        timeout-minutes: 20
-        run: Examples/ResearchExplorer/Scripts/test.sh
+      # Research Explorer is CI-tested independently in ThorFuchs/Swift-MCP-Examples.
+      # Keep Core CI scoped to the SDK and its own stdio fixtures.
 
   linux:
     # GitHub-hosted runner with the official Swift 6.4.2 Ubuntu 24.04 image.
