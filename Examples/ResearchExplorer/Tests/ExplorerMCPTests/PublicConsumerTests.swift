@@ -48,13 +48,13 @@ struct PublicConsumerTests {
     @Test func fourToolJourneyUsesRealDispatcherAndValidatedStructuredResults() async throws {
         let (h, _) = try await harness()
         let search = try success(SearchPage.self, await invoke(h, "search_articles", SearchInput(query: "Riverglass", project: "fixture-enwiki", limit: 10)))
-        #expect(search.candidates.map(\.id) == ["fixture-observatory", "fixture-expedition"])
+        #expect(search.candidates.map(\.id) == ["fixture-observatory", "fixture-expedition", "fixture-instrument", "fixture-observations", "fixture-lanterns"])
         let outline = try success(Outline.self, await invoke(h, "get_article_outline", OutlineInput(project: "fixture-enwiki", candidateID: "fixture-observatory")))
         let part = try #require(outline.sections.first(where: { $0.location.partID == "p2" })?.location)
         let passage = try success(SectionPassage.self, await invoke(h, "read_article_section", SectionInput(snapshot: outline.snapshot, part: part, maxTextBytes: 32768)))
         #expect(passage.text.contains("2-metre") && passage.text.contains("α — π"))
         let refs = try success(SectionReferences.self, await invoke(h, "get_section_references", ReferencesInput(snapshot: outline.snapshot, part: part)))
-        #expect(refs.references.map(\.id) == ["ref-1"] && refs.unresolvedIDs == ["ref-unresolved"])
+        #expect(refs.references.map(\.id) == ["ref-instrument-notes"] && refs.unresolvedIDs == ["ref-lost-ledger"])
         #expect(!refs.independentlyVerified)
         let state = await h.server.activity
         #expect(state.active == 0 && state.requests == 0 && state.leases == 0 && state.bufferedBytes == 0)

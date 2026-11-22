@@ -1,0 +1,162 @@
+{
+  "fixture_kind": "synthetic_normalized_example_not_upstream_payload",
+  "format_version": "wre-fixture-1",
+  "project": "fixture-enwiki",
+  "page_id": "observations",
+  "revision_id": "r1",
+  "title": "Riverglass Tide-Star Observations",
+  "source_url": "fixture://riverglass/observations/r1",
+  "normalizer_version": "fixture-1",
+  "license": "Apache-2.0 (original fictional teaching text, Research Explorer)",
+  "modified_at": "2026-05-11T14:05:00Z",
+  "parts": [
+    {
+      "id": "p1",
+      "heading": "Overview",
+      "text": "The Riverglass Tide-Star Observations are a fictional sixty-year series of star timings made at Riverglass Observatory between 1903 and 1963. They were published as the Tide-Star Catalogue and used by river ferry pilots to plan night crossings. The series is original teaching data for Research Explorer.",
+      "citations": [
+        "ref-tide-star-catalogue"
+      ]
+    },
+    {
+      "id": "p2",
+      "heading": "Method",
+      "text": "On each clear night an observer timed a fixed list of forty bright stars as they crossed the wires of the Meridian Circle. Every timing was entered with the observer's name, the clock correction and a short note on the sky.",
+      "citations": [
+        "ref-tide-star-catalogue",
+        "ref-instrument-notes"
+      ]
+    },
+    {
+      "id": "p3",
+      "heading": "The catalogue",
+      "text": "Six editions of the Tide-Star Catalogue appeared between 1903 and 1963. Each edition reprinted the full list of stars with updated mean times and added an appendix on special campaigns, such as the Ostmere expedition of 1928.",
+      "citations": [
+        "ref-tide-star-catalogue"
+      ]
+    },
+    {
+      "id": "p4",
+      "heading": "Notable records",
+      "text": "Two episodes in the series are frequently cited in the collection's other articles.",
+      "citations": [],
+      "parts": [
+        {
+          "id": "p4-1",
+          "heading": "The fog winter of 1917",
+          "text": "In the winter of 1917 the river fog covered the bluffs for thirty-one nights in a row. The catalogue lists the gap honestly instead of interpolating times, a decision praised by later readers.",
+          "citations": [
+            "ref-tide-star-catalogue"
+          ]
+        },
+        {
+          "id": "p4-2",
+          "heading": "Ferryman's Lamp",
+          "text": "The star known locally as Ferryman's Lamp produced the expedition's disputed reading of 1928. In the catalogue it carries a footnote pointing to both published explanations.",
+          "citations": [
+            "ref-tide-star-catalogue",
+            "ref-carrow-letter"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "p5",
+      "heading": "Data gaps",
+      "text": "Handwritten night books for 1946–1951 were destroyed in the flood of 1952. The printed catalogue preserves the averaged results, but the individual timings for those years cannot be checked.",
+      "citations": [
+        "ref-flood-report"
+      ]
+    },
+    {
+      "id": "p6",
+      "heading": "Access",
+      "text": "The printed catalogues are kept in the Riverglass Town Archive. Because this collection is fictional, the fixture:// links in its references are inactive by design.",
+      "citations": [
+        "ref-archive-guide"
+      ]
+    }
+  ],
+  "references": [
+    {
+      "id": "ref-tide-star-catalogue",
+      "title": "Riverglass Observatory. The Tide-Star Catalogue, editions 1–6, 1903–1963. (fictional)",
+      "url": "fixture://riverglass/references/tide-star-catalogue",
+      "synthetic": true
+    },
+    {
+      "id": "ref-instrument-notes",
+      "title": "Halden Instrument Works. Riverglass Meridian Circle: Instrument Notes. Riverglass, 1889. (fictional)",
+      "url": "fixture://riverglass/references/instrument-notes",
+      "synthetic": true
+    },
+    {
+      "id": "ref-carrow-letter",
+      "title": "Mira Carrow. Letter to the Society on the Disputed Reading, 4 November 1928. (fictional)",
+      "url": "fixture://riverglass/references/carrow-letter",
+      "synthetic": true
+    },
+    {
+      "id": "ref-flood-report",
+      "title": "Tamsel Valley Board. Report on the Flood of March 1952. (fictional)",
+      "url": "fixture://riverglass/references/flood-report",
+      "synthetic": true
+    },
+    {
+      "id": "ref-archive-guide",
+      "title": "Riverglass Town Archive. Guide to the Observatory Papers, 2004. (fictional)",
+      "url": "fixture://riverglass/references/archive-guide",
+      "synthetic": true
+    }
+  ],
+  "tables": [
+    {
+      "id": "table-editions",
+      "caption": "Tide-Star Catalogue editions (fictional)",
+      "columns": [
+        "Edition",
+        "Year",
+        "Stars listed",
+        "Nights observed"
+      ],
+      "rows": [
+        [
+          1,
+          1903,
+          40,
+          212
+        ],
+        [
+          2,
+          1913,
+          40,
+          1874
+        ],
+        [
+          3,
+          1923,
+          40,
+          1702
+        ],
+        [
+          4,
+          1933,
+          40,
+          1955
+        ],
+        [
+          5,
+          1948,
+          40,
+          1310
+        ],
+        [
+          6,
+          1963,
+          40,
+          1488
+        ]
+      ]
+    }
+  ]
+}

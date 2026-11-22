@@ -1,21 +1,71 @@
 {
   "fixture_kind": "synthetic_normalized_example_not_upstream_payload",
   "query": "Riverglass",
+  "truncated": false,
   "candidates": [
     {
       "id": "fixture-observatory",
       "project": "fixture-enwiki",
       "page_id": "observatory",
       "title": "Riverglass Observatory",
-      "description": "A fictional observatory"
+      "description": "Fictional observatory on the Tamsel bluffs · two revisions",
+      "keywords": [
+        "observatory",
+        "telescope",
+        "history",
+        "flood"
+      ]
     },
     {
       "id": "fixture-expedition",
       "project": "fixture-enwiki",
       "page_id": "expedition",
-      "title": "Riverglass Expedition",
-      "description": "A fictional expedition"
+      "title": "Riverglass Expedition of 1928",
+      "description": "Fictional field campaign across the Ostmere salt flats",
+      "keywords": [
+        "expedition",
+        "ostmere",
+        "disputed reading",
+        "1928"
+      ]
+    },
+    {
+      "id": "fixture-instrument",
+      "project": "fixture-enwiki",
+      "page_id": "instrument",
+      "title": "Riverglass Meridian Circle",
+      "description": "Fictional meridian reflecting telescope",
+      "keywords": [
+        "instrument",
+        "telescope",
+        "mirror",
+        "calibration"
+      ]
+    },
+    {
+      "id": "fixture-observations",
+      "project": "fixture-enwiki",
+      "page_id": "observations",
+      "title": "Riverglass Tide-Star Observations",
+      "description": "Fictional sixty-year star timing series and catalogue",
+      "keywords": [
+        "observations",
+        "catalogue",
+        "tide-star",
+        "ferry"
+      ]
+    },
+    {
+      "id": "fixture-lanterns",
+      "project": "fixture-enwiki",
+      "page_id": "lanterns",
+      "title": "Riverglass Lantern Survey",
+      "description": "Fictional 1911 survey · reference metadata deliberately absent",
+      "keywords": [
+        "lantern",
+        "survey",
+        "light"
+      ]
     }
-  ],
-  "truncated": false
+  ]
 }

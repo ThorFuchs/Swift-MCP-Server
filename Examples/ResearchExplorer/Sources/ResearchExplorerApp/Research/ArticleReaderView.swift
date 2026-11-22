@@ -12,7 +12,11 @@ struct ArticleReaderView: View {
             VStack(alignment: .leading, spacing: 22) {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(outline.provenance.title).font(.largeTitle).fontWeight(.bold).textSelection(.enabled)
-                    Label(outline.provenance.synthetic ? "Offline demo · Fictional article" : "Wikipedia English · Fetched snapshot · Plain text", systemImage: outline.provenance.synthetic ? "externaldrive" : "globe").font(.callout).foregroundStyle(.secondary)
+                    HStack(spacing: 14) {
+                        Label(outline.provenance.synthetic ? "Offline demo · Fictional article" : "Wikipedia English · Fetched snapshot · Plain text", systemImage: outline.provenance.synthetic ? "externaldrive" : "globe")
+                        Label("Revision \(outline.snapshot.revisionID) · pinned", systemImage: "pin")
+                        if let modified = outline.provenance.modifiedAt { Label("Edited \(modified)", systemImage: "clock") }
+                    }.font(.callout).foregroundStyle(.secondary)
                     Menu {
                         ForEach(outline.sections, id: \.location) { part in
                             Button(part.heading ?? "Introduction") { model.read(part.location) }
@@ -29,6 +33,7 @@ struct ArticleReaderView: View {
                     if model.isBusy { ProgressView("Reading section and associated references…") }
                     else { Text("Choose a section from Contents to read its text and citation associations.").foregroundStyle(.secondary) }
                 }
+                RevisionPanel(model: model, outline: outline)
                 Divider()
                 ReferencesView(citations: model.citations, problem: model.referenceProblem, loading: model.phase == .references)
                 Divider()
@@ -60,16 +65,74 @@ struct ReferencesView: View {
             if loading { ProgressView("Loading associated references…") }
             else if let problem { Text(problem.message + " " + problem.recovery).foregroundStyle(.secondary) }
             else if let citations {
-                if citations.references.isEmpty { Text("No resolved references for this section.").foregroundStyle(.secondary) }
+                if citations.references.isEmpty { Text(citations.unresolvedIDs.isEmpty ? "This section cites no references." : "No resolved references for this section.").foregroundStyle(.secondary) }
                 ForEach(citations.references, id: \.id) { reference in
                     VStack(alignment: .leading, spacing: 4) {
                         Label(reference.title, systemImage: "doc.text").textSelection(.enabled)
                         Text(reference.synthetic ? "Fictional citation · link inactive" : "Reference metadata; source not independently verified").font(.caption).foregroundStyle(.secondary)
                     }.padding(.vertical, 4)
                 }
-                if !citations.unresolvedIDs.isEmpty { Text("\(citations.unresolvedIDs.count) unresolved citation identifiers").foregroundStyle(.secondary) }
+                if !citations.unresolvedIDs.isEmpty {
+                    Label("\(citations.unresolvedIDs.count) cited identifier\(citations.unresolvedIDs.count == 1 ? "" : "s") without reference metadata: \(citations.unresolvedIDs.joined(separator: ", "))", systemImage: "questionmark.circle").foregroundStyle(.secondary).textSelection(.enabled)
+                }
                 if citations.truncated { Text("Reference projection shortened to its limit.") }
             } else { Text("Read a section to inspect its associated references.").foregroundStyle(.secondary) }
         }
+    }
+}
+
+/// Explicit revision handling: the pinned snapshot is what the reader shows until the user
+/// chooses otherwise. Checking for, comparing and switching to a newer revision are separate steps.
+struct RevisionPanel: View {
+    @Bindable var model: ResearchController
+    let outline: Outline
+    var body: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Sections and references come from revision \(outline.snapshot.revisionID) until you choose otherwise. An expired revision is reported, never silently replaced.")
+                    .foregroundStyle(.secondary)
+                HStack {
+                    Button("Check for a newer revision", systemImage: "arrow.triangle.2.circlepath") { model.compareWithLatestRevision() }
+                        .disabled(model.isBusy)
+                    if let edit = model.offlineEdit, !model.offlineEditPublished {
+                        Button("Simulate an upstream edit", systemImage: "square.and.pencil") { model.publishOfflineEdit() }
+                            .disabled(model.isBusy).help(edit.summary + " Offline demo only; your open revision stays pinned.")
+                    }
+                    if model.phase == .comparing { ProgressView().controlSize(.small) }
+                }
+                if model.offlineEditPublished, model.comparison == nil {
+                    Text("An upstream edit was published in the offline collection. This reader still shows revision \(outline.snapshot.revisionID).")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+                if let comparison = model.comparison { result(comparison) }
+            }.frame(maxWidth: .infinity, alignment: .leading).padding(6)
+        } label: { Label("Revision", systemImage: "clock.arrow.circlepath") }
+    }
+    @ViewBuilder private func result(_ comparison: RevisionComparison) -> some View {
+        let latest = comparison.latest.snapshot.revisionID, pinned = comparison.pinned.revisionID
+        if comparison.latestIsPinned {
+            Label("Revision \(pinned) is still the latest revision.", systemImage: "checkmark.circle")
+        } else {
+            VStack(alignment: .leading, spacing: 10) {
+                Label("Revision \(latest) is available\(comparison.latest.provenance.modifiedAt.map { " (edited \($0))" } ?? ""). You are still reading \(pinned).", systemImage: "exclamationmark.arrow.circlepath")
+                switch comparison.passage {
+                case .notCompared: Text("Choose a section, then check again to compare its text.").foregroundStyle(.secondary)
+                case .unchanged: Text("The selected section is identical in \(latest).").foregroundStyle(.secondary)
+                case .absentInLatest: Text("The selected section does not exist in \(latest).").foregroundStyle(.secondary)
+                case .changed(let old, let new):
+                    HStack(alignment: .top, spacing: 16) {
+                        passage("Pinned \(pinned)", old)
+                        passage("Latest \(latest)", new)
+                    }
+                }
+                Button("Switch reader to \(latest)", systemImage: "arrow.right.circle") { model.adoptLatestRevision() }.disabled(model.isBusy)
+            }
+        }
+    }
+    private func passage(_ title: String, _ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.headline)
+            Text(text).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+        }.frame(maxWidth: .infinity, alignment: .topLeading).accessibilityElement(children: .combine)
     }
 }

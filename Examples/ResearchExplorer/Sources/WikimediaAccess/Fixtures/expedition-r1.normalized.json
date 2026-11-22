@@ -1,0 +1,121 @@
+{
+  "fixture_kind": "synthetic_normalized_example_not_upstream_payload",
+  "format_version": "wre-fixture-1",
+  "project": "fixture-enwiki",
+  "page_id": "expedition",
+  "revision_id": "r1",
+  "title": "Riverglass Expedition of 1928",
+  "source_url": "fixture://riverglass/expedition/r1",
+  "normalizer_version": "fixture-1",
+  "license": "Apache-2.0 (original fictional teaching text, Research Explorer)",
+  "modified_at": "2026-04-02T11:15:00Z",
+  "parts": [
+    {
+      "id": "p1",
+      "heading": "Overview",
+      "text": "The Riverglass Expedition of 1928 is a fictional field campaign in which four members of Riverglass Observatory carried a portable transit instrument across the Ostmere salt flats to compare star timings taken far from the river fog. It is part of the original Research Explorer teaching collection and describes no real expedition.",
+      "citations": [
+        "ref-expedition-journal"
+      ]
+    },
+    {
+      "id": "p2",
+      "heading": "Background",
+      "text": "By the 1920s ferry pilots had begun to question whether the observatory's tide-star times were affected by mist over the Tamsel. The society's director, Ines Varga, proposed repeating a series of timings on the dry Ostmere plateau, where the sky was reliably clear.",
+      "citations": [
+        "ref-society-minutes",
+        "ref-expedition-journal"
+      ]
+    },
+    {
+      "id": "p3",
+      "heading": "Route",
+      "text": "The party left Riverglass on 2 August 1928 with two carts, the portable transit and a ship's chronometer borrowed from the ferry company.",
+      "citations": [
+        "ref-expedition-journal"
+      ],
+      "parts": [
+        {
+          "id": "p3-1",
+          "heading": "Ostmere crossing",
+          "text": "The crossing took nine days. The surveyors marked their route with cairns so that the chronometer could be carried back along a measured line, allowing them to estimate how much it drifted on the journey.",
+          "citations": [
+            "ref-expedition-journal"
+          ]
+        },
+        {
+          "id": "p3-2",
+          "heading": "Camp Lantern",
+          "text": "The observing camp, named Camp Lantern after the shaded lamps used for reading the wires, stood forty kilometres east of the observatory. Tobiah Lusk later described the cold nights there in his memoir.",
+          "citations": [
+            "ref-lusk-memoir"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "p4",
+      "heading": "Observations",
+      "text": "Over sixteen clear nights the party timed eleven tide-stars. The camp results agreed with the observatory's catalogue to within a fraction of a second for ten of them, supporting the view that the river fog had little effect on the published times.",
+      "citations": [
+        "ref-expedition-journal",
+        "ref-tide-star-catalogue"
+      ]
+    },
+    {
+      "id": "p5",
+      "heading": "Disputed reading",
+      "text": "The expedition compared two readings of the star Ferryman's Lamp taken at the camp and at the observatory on the same night. They differed by 1.8 seconds, far more than the other ten stars. Mira Carrow, the expedition's computer, argued in a letter that the chronometer had been jolted on the crossing; Lusk maintained that the observatory clock was at fault. The question was never settled.",
+      "citations": [
+        "ref-carrow-letter",
+        "ref-lusk-memoir"
+      ]
+    },
+    {
+      "id": "p6",
+      "heading": "Aftermath",
+      "text": "The expedition's results were printed as an appendix to the fourth edition of the Tide-Star Catalogue. The disputed reading was published with both explanations side by side, following the founding rule that observations are printed with their observers' names.",
+      "citations": [
+        "ref-tide-star-catalogue"
+      ]
+    },
+    {
+      "id": "p7",
+      "heading": "See also",
+      "text": "Riverglass Observatory; Riverglass Meridian Circle; Riverglass Tide-Star Observations.",
+      "citations": []
+    }
+  ],
+  "references": [
+    {
+      "id": "ref-expedition-journal",
+      "title": "Ines Varga and Tobiah Lusk. Journal of the Ostmere Expedition, 1928. (fictional)",
+      "url": "fixture://riverglass/references/expedition-journal",
+      "synthetic": true
+    },
+    {
+      "id": "ref-society-minutes",
+      "title": "Riverglass Philosophical Society. Minutes of the Founding Meetings, 1885–1888. (fictional)",
+      "url": "fixture://riverglass/references/society-minutes",
+      "synthetic": true
+    },
+    {
+      "id": "ref-lusk-memoir",
+      "title": "Tobiah Lusk. Forty Nights on the Ostmere. Riverglass: Lantern Press, 1951. (fictional)",
+      "url": "fixture://riverglass/references/lusk-memoir",
+      "synthetic": true
+    },
+    {
+      "id": "ref-tide-star-catalogue",
+      "title": "Riverglass Observatory. The Tide-Star Catalogue, editions 1–6, 1903–1963. (fictional)",
+      "url": "fixture://riverglass/references/tide-star-catalogue",
+      "synthetic": true
+    },
+    {
+      "id": "ref-carrow-letter",
+      "title": "Mira Carrow. Letter to the Society on the Disputed Reading, 4 November 1928. (fictional)",
+      "url": "fixture://riverglass/references/carrow-letter",
+      "synthetic": true
+    }
+  ]
+}

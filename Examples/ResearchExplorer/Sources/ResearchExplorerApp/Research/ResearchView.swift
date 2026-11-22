@@ -24,12 +24,33 @@ struct ResearchView: View {
                         VStack(alignment: .leading, spacing: 5) {
                             Text(candidate.title).font(.headline)
                             if let description = candidate.description { Text(description).foregroundStyle(.secondary) }
+                            SourceBadge(source: model.source)
                         }.padding(.vertical, 8).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
                     }.buttonStyle(.plain).accessibilityLabel("Open \(candidate.title)")
                 }
                 if page.truncated { Text(model.source == .offlineDemo ? "More candidates exist. Refine the query." : "Showing up to 10 results. Refine your query; total matches are unknown.").font(.callout).padding(8) }
+            } else if model.phase == .empty || model.phase == .cancelled {
+                ContentUnavailableView {
+                    Label(model.phase == .empty ? "No matching articles" : "Search cancelled", systemImage: "book.closed")
+                } description: {
+                    Text(model.phase == .empty ? "Nothing in this source matched. No other source was searched instead." : "The search was stopped. No partial result is shown.")
+                } actions: {
+                    if model.source == .offlineDemo {
+                        Button("Show all Riverglass articles") { model.query = OfflineTour.query; model.search() }
+                    }
+                }
+            } else if model.source == .offlineDemo {
+                ContentUnavailableView {
+                    Label("Explore the Riverglass collection", systemImage: "books.vertical")
+                } description: {
+                    Text("Five fictional articles about an observatory that never existed, written as teaching data. Everything stays on this Mac: no network request is made and no server is started.")
+                } actions: {
+                    Button("Explore the offline collection", systemImage: "sparkle.magnifyingglass") { model.exploreOfflineCollection() }
+                        .buttonStyle(.borderedProminent).controlSize(.large)
+                    Text("Or search for observatory, expedition, telescope or catalogue.").font(.callout).foregroundStyle(.secondary)
+                }
             } else {
-                ContentUnavailableView(model.phase == .empty ? "No matching articles" : model.phase == .cancelled ? "Search cancelled" : "A place to follow your curiosity", systemImage: "book.closed", description: Text(model.source == .offlineDemo ? "Search the fictional Riverglass collection. No network request is made." : "Search English Wikipedia explicitly. Opening an article selects one fetched revision; sections and references use that snapshot."))
+                ContentUnavailableView("A place to follow your curiosity", systemImage: "book.closed", description: Text("Search English Wikipedia explicitly. Opening an article selects one fetched revision; sections and references use that snapshot. For a no-network tour, choose Offline demo in Server."))
             }
         }
         .toolbar {
@@ -48,5 +69,16 @@ struct ResearchView: View {
             }
         }
         .onChange(of: focusID) { searchFocused = true }
+    }
+}
+
+/// Every result and article names its source, so fictional data is never mistaken for Wikipedia.
+struct SourceBadge: View {
+    let source: ResearchSource
+    var body: some View {
+        Label(source == .offlineDemo ? "Fictional · Offline demo" : "Wikipedia English",
+              systemImage: source == .offlineDemo ? "externaldrive" : "globe")
+            .font(.caption).foregroundStyle(.secondary)
+            .accessibilityLabel(source == .offlineDemo ? "Source: fictional offline demo" : "Source: Wikipedia English")
     }
 }
