@@ -98,7 +98,8 @@ struct PreparedSource: Sendable {
             }
         }
     }
-    func startServer() { guard !isQuitting, !termination.unsettled else { return }; server?.start() }
+    /// A new server run starts with no results or inspector records of an earlier run.
+    func startServer() { guard !isQuitting, !termination.unsettled else { return }; journey.clear(); server?.start() }
     /// A client journey never outlives its server: cancel it first (it joins promptly, the
     /// server drain closes any remaining exchange).
     func stopServer() { journey.cancel(); server?.stop() }
@@ -110,7 +111,7 @@ struct PreparedSource: Sendable {
         guard profile != self.profile, canSwitchSource else { return }
         isQuitting = true // quiesces every mutating UI action during handoff
         bootstrap = Task { [self] in
-            await journey.cancelAndJoin()
+            await journey.cancelAndJoin(); journey.clear() // nothing of the old source survives the switch
             await research?.shutdown() // keep the old owner until its actual join
             do {
                 let prepared = try await loadSource(profile)
@@ -156,7 +157,7 @@ struct PreparedSource: Sendable {
         isQuitting = true
         let clean = await termination.request(waitMilliseconds: waitMilliseconds, settle: { [self] in
             bootstrap?.cancel(); await bootstrap?.value
-            await journey.cancelAndJoin() // client requests end before the server stops
+            await journey.cancelAndJoin(); journey.clear() // client requests end before the server stops; a declined quit keeps the journey usable
             await research?.shutdown()
             exportTask?.cancel(); await exportTask?.value
             let serverClean = await server?.stopAndJoin() ?? true

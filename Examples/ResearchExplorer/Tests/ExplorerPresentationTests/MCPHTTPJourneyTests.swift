@@ -43,8 +43,8 @@ private final class ParkedTransport: ClientTransport, Sendable {
     }
 }
 
-private enum LiveServerStartup: Error { case notRunning(failed: Bool) }
-@MainActor private final class LiveServer {
+enum LiveServerStartup: Error { case notRunning(failed: Bool) }
+@MainActor final class LiveServer {
     let service: ExplorerService, activity = ActivityStore(), controller: ServerController
     init(service: ExplorerService) {
         let activity = self.activity
