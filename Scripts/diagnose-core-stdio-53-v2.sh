@@ -38,7 +38,7 @@ if command -v shasum >/dev/null; then
 fi
 pair='concurrentRequestsProgressAndShutdownOverOneChannel|listenOverStdioAcknowledgesAndCancelsCleanly'
 pressure="$pair|SchemaValidationCases|InvalidServerOutputCases"
-printf 'repetition\tarm\texit_status\ttest_summary_seen\tpair_started\tchild_launches\tchild_termination_receipts\tfixture_terminal_receipts\twire_exchange_ends\tlog\n' > "$out/results.tsv"
+printf 'repetition\tarm\texit_status\ttest_summary_seen\tpair_started\tselection_verified\tchild_launches\tchild_termination_receipts\tfixture_terminal_receipts\twire_exchange_ends\tlog\n' > "$out/results.tsv"
 failed=0
 run_arm() {
     local iteration="$1" arm="$2"
@@ -58,9 +58,30 @@ run_arm() {
     exits="$(grep -c 'event=child.terminated' "$log" || true)"
     exchanges="$(grep -c 'event=exchange.end' "$log" || true)"
     # No matching files is an explicit zero, not an assumed successful termination.
-    terminal="$(find "$MCP_CORE53_TRACE_DIR" -type f -name 'fixture-*.log' -exec grep -El 'event=(STOP|CLEAN|FAIL)( |$)' {} + | wc -l | tr -d '[:space:]')"
-    if (( status != 0 || summary != 1 || started != 2 || launches < 2 || exits < 2 || terminal < 2 || exchanges < 2 )); then failed=1; fi
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$iteration" "$arm" "$status" "$summary" "$started" "$launches" "$exits" "$terminal" "$exchanges" "$log" >> "$out/results.tsv"
+    terminal=0
+    local file selection=1
+    for file in "$MCP_CORE53_TRACE_DIR"/fixture-*.log; do
+        [[ -f "$file" ]] || continue
+        if grep -Eq 'event=(STOP|CLEAN|FAIL)( |$)' "$file"; then
+            terminal=$((terminal + 1))
+        fi
+    done
+    # Verify the selectors, not merely a nonempty run. A missing match is recorded,
+    # never allowed to abort the later experimental arms under errexit/pipefail.
+    case "$arm" in
+        parallel-pair)
+            if ! grep -Eq 'Test run with 2 tests in ' "$log"; then selection=0; fi
+            ;;
+        parallel-pair-schema)
+            if ! grep -F 'structuredContentIsCheckedAgainstTheToolsOutputSchema() started.' "$log" >/dev/null ||
+               ! grep -F 'invalidResultsAreRejectedForEveryMethod(_:_:) started.' "$log" >/dev/null; then selection=0; fi
+            ;;
+        parallel-all|serial-all)
+            if ! grep -Eq 'Test run with 26 tests in ' "$log"; then selection=0; fi
+            ;;
+    esac
+    if (( status != 0 || summary != 1 || selection != 1 || started != 2 || launches < 2 || exits < 2 || terminal < 2 || exchanges < 2 )); then failed=1; fi
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$iteration" "$arm" "$status" "$summary" "$started" "$selection" "$launches" "$exits" "$terminal" "$exchanges" "$log" >> "$out/results.tsv"
     grep -E 'core53-process|core53\]|Test run with|error:|failed' "$log" | tail -n 24 || true
 }
 for ((iteration=1; iteration<=repetitions; iteration++)); do
