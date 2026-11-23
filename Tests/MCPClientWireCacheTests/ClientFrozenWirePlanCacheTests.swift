@@ -11,7 +11,7 @@ import Testing
         let cache = ClientFrozenWirePlanCache()
         let implementation = try JSONParser().parse(#"{"name":"client","version":"1"}"#)
         let invalidImplementation = try JSONParser().parse(#"{"name":false,"version":"1"}"#)
-        let discovery = try JSONParser().parse(#"{"resultType":"complete","supportedVersions":["2026-07-28"],"capabilities":{}}"#)
+        let discovery = try JSONParser().parse(#"{"resultType":"complete","supportedVersions":["2026-07-28"],"capabilities":{},"ttlMs":0,"cacheScope":"private"}"#)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
             for _ in 0..<16 {
