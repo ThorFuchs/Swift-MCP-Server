@@ -351,21 +351,18 @@ public actor Client {
     }
 }
 
-/// Compiles frozen 2026-07-28 definitions on first use and validates against them.
+/// Validates frozen definitions with shared immutable plans. Only server-supplied
+/// schema plans remain in this validator's client-local cache.
 actor WireValidator {
     #if CORE53_DIAGNOSTICS
     nonisolated let core53ID = UUID()
     #endif
-    private var document: FrozenWireDocument?
-    private var plans: [FrozenWireDefinition: WireDefinitionPlan] = [:]
+    private let frozenPlans: ClientFrozenWirePlanCache
+    static let compileLimits = ClientFrozenWirePlanCache.compileLimits
 
-    static let compileLimits: JSONLimits = {
-        var limits = JSONLimits.balanced
-        for key: JSONResourceMetric in [.workUnits, .compileWorkUnits, .evaluationWorkUnits, .numericWorkUnits, .regexCompileWorkUnits, .aggregateRegexWorkUnits] {
-            limits[key] = 256_000_000
-        }
-        return limits
-    }()
+    init(frozenPlans: ClientFrozenWirePlanCache = .shared) {
+        self.frozenPlans = frozenPlans
+    }
 
     /// Compiled server-supplied schemas (`outputSchema`, `requestedSchema`), bounded.
     private var schemas: [JSON: CompiledJSONSchema] = [:]
@@ -385,49 +382,25 @@ actor WireValidator {
         return try SchemaValidatorAdapter.validate(value, against: plan, limits: Self.compileLimits).result.isValid
     }
 
-    func validate(_ value: JSON, as definition: FrozenWireDefinition) throws -> Bool {
+    func validate(_ value: JSON, as definition: FrozenWireDefinition) async throws -> Bool {
+        try Task.checkCancellation()
         #if CORE53_DIAGNOSTICS
-        let compiled = try plan(definition)
+        core53WireTrace(self, "event=cache.await.begin definition=\(definition)")
+        let compiled = try await frozenPlans.plan(for: definition, trace: { event in core53WireTrace(self, event) })
+        core53WireTrace(self, "event=cache.await.end definition=\(definition)")
+        #else
+        let compiled = try await frozenPlans.plan(for: definition)
+        #endif
+        try Task.checkCancellation()
+        // Do not hold the shared cache actor during instance-specific evaluation.
+        #if CORE53_DIAGNOSTICS
         core53WireTrace(self, "event=evaluate.begin definition=\(definition)")
+        #endif
         let valid = try compiled.validate(value, limits: Self.compileLimits).result
-        core53WireTrace(self, "event=evaluate.end definition=\(definition) valid=\(valid)")
-        return valid
-        #else
-        try plan(definition).validate(value, limits: Self.compileLimits).result
-        #endif
-    }
-
-    private func plan(_ definition: FrozenWireDefinition) throws -> WireDefinitionPlan {
         #if CORE53_DIAGNOSTICS
-        if let plan = plans[definition] {
-            core53WireTrace(self, "event=plan.hit definition=\(definition)")
-            return plan
-        }
-        let document: FrozenWireDocument
-        if let cached = self.document { document = cached }
-        else {
-            core53WireTrace(self, "event=schema.read.begin")
-            let bytes = try FrozenWireSchema.read(maximumBytes: FrozenWireSchema.byteCount)
-            core53WireTrace(self, "event=schema.read.end")
-            core53WireTrace(self, "event=schema.parse.begin")
-            document = try FrozenWireSchema.parse(bytes, limits: Self.compileLimits).result
-            core53WireTrace(self, "event=schema.parse.end")
-        }
-        self.document = document
-        core53WireTrace(self, "event=schema.root.begin definition=\(definition)")
-        let root = try document.root(at: definition, limits: Self.compileLimits).result
-        core53WireTrace(self, "event=schema.root.end definition=\(definition)")
-        core53WireTrace(self, "event=schema.compile.begin definition=\(definition)")
-        let plan = try WireDefinitionPlan.compile(root, limits: Self.compileLimits).result
-        core53WireTrace(self, "event=schema.compile.end definition=\(definition)")
-        #else
-        if let plan = plans[definition] { return plan }
-        let document = try self.document ?? FrozenWireSchema.parse(FrozenWireSchema.read(maximumBytes: FrozenWireSchema.byteCount), limits: Self.compileLimits).result
-        self.document = document
-        let root = try document.root(at: definition, limits: Self.compileLimits).result
-        let plan = try WireDefinitionPlan.compile(root, limits: Self.compileLimits).result
+        core53WireTrace(self, "event=evaluate.end definition=\(definition) valid=\(valid)")
         #endif
-        plans[definition] = plan
-        return plan
+        try Task.checkCancellation()
+        return valid
     }
 }

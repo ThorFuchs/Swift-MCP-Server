@@ -65,6 +65,8 @@ let package = Package(
         .testTarget(name: "MCPTasksSQLiteTests", dependencies: ["MCPTasksSQLite", "MCPTasks", "MCPTasksTesting", .product(name: "SQLiteSwift", package: "Swift-SQLite"), .product(name: "SQLiteSwiftTesting", package: "Swift-SQLite"), .product(name: "JSON", package: "swift-json")]),
         .testTarget(name: "MCPTasksTests", dependencies: ["MCPTasks", "MCPTasksTesting", "MCPServer", "MCPProtocol", "MCPServerTesting", .product(name: "JSON", package: "swift-json")]),
         .testTarget(name: "MCPClientTests", dependencies: ["MCPClient", "MCPClientStdio", "MCPServerTesting", "MCPServer", "MCPProtocol", .product(name: "JSON", package: "swift-json")]),
+        // Separate target preserves the original MCPClientTests population for the #53 A/B proof.
+        .testTarget(name: "MCPClientWireCacheTests", dependencies: ["MCPClient", "MCPProtocol", .product(name: "JSON", package: "swift-json")]),
         .testTarget(name: "MCPTasksClientTests", dependencies: ["MCPTasksClient", "MCPTasks", "MCPClient", "MCPServer", "MCPServerTesting", "MCPProtocol", .product(name: "JSON", package: "swift-json")]),
         .testTarget(name: "MCPSkillsClientTests", dependencies: [.product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux])), "MCPSkillsClient", "MCPSkills", "MCPClient", "MCPServer", "MCPServerTesting", "MCPProtocol", .product(name: "JSON", package: "swift-json")]),
         .testTarget(name: "MCPSkillsTests", dependencies: [.product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux])), "MCPSkills", "MCPSkillsFormat", "MCPServer", "MCPProtocol", .product(name: "JSON", package: "swift-json")]),

@@ -66,7 +66,10 @@ Transports:
   `Equatable`, and `ClientError.Code` names the codes (for example `.methodNotFound`,
   `.missingRequiredCapabilities`). `requiredExtensions` reads the extensions a `-32021` names.
 - **Concurrency.** `Client` is an actor; calls run concurrently on the caller's tasks and
-  cancelling a call cancels its exchange. No detached tasks, no global state.
+  cancelling a call cancels its exchange. No detached tasks or shared mutable request state.
+  Only hash-verified frozen wire preparation is shared through a bounded, process-local actor
+  (see [ADR-0007](ADR/0007-client-frozen-wire-cache.md)); each response is still evaluated,
+  and server-supplied schema plans remain client-local.
 
 ## Extensions
 

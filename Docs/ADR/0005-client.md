@@ -70,7 +70,9 @@ interpret results.
 - **Errors.** JSON-RPC errors surface as `ClientError.server(code:message:data:)`;
   `-32021` keeps its `requiredCapabilities`.
 - **Concurrency.** `Client` is an actor; requests run concurrently on the caller's task.
-  No detached tasks, no global state, no process-wide signal or logging setup.
+  No detached tasks, shared mutable request state, or process-wide signal or logging setup.
+  [ADR-0007](0007-client-frozen-wire-cache.md) defines the narrow exception for immutable
+  frozen protocol artifacts.
 
 ### Verification
 
