@@ -22,26 +22,51 @@ private func fixture() throws -> String {
 }
 
 /// Runs the transport for the body's duration, then shuts it down and joins it.
-private func withStdio(_ transport: StdioClientTransport, _ body: @escaping @Sendable (Client) async throws -> Void) async throws {
+private func withStdio(_ transport: StdioClientTransport, trace: StdioStartupTrace? = nil,
+                       _ body: @escaping @Sendable (Client) async throws -> Void) async throws {
     try await withThrowingTaskGroup(of: Void.self) { group in
-        group.addTask { try await transport.run() }
+        group.addTask {
+            if let trace { try await trace.run(transport) }
+            else { try await transport.run() }
+        }
         let client = Client(transport: transport)
+        #if CORE53_DIAGNOSTICS
+        trace?.mark("client.id=\(ObjectIdentifier(client))")
+        #endif
         // run() is ready once exchanges are accepted; discover doubles as the readiness probe.
         let end = ContinuousClock.now.advanced(by: .seconds(30))
         while true {
-            do { _ = try await client.discover(); break }
-            catch StdioClientTransportError.notRunning where ContinuousClock.now < end { try await Task.sleep(for: .milliseconds(20)) }
+            do { _ = try await client.discover(); trace?.ready(); break }
+            catch StdioClientTransportError.notRunning where ContinuousClock.now < end {
+                trace?.notRunning()
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            catch {
+                trace?.mark("discover.error \(String(reflecting: error))")
+                throw error
+            }
         }
-        do { try await body(client) } catch { transport.shutdown(); try? await group.waitForAll(); throw error }
+        trace?.mark("body.begin")
+        do { try await body(client) } catch {
+            trace?.mark("body.error \(String(reflecting: error))")
+            transport.shutdown()
+            do { try await group.waitForAll() }
+            catch { trace?.mark("join.error \(String(reflecting: error))") }
+            throw error
+        }
+        trace?.mark("shutdown.requested")
         transport.shutdown()
         try await group.waitForAll()
+        trace?.mark("shutdown.joined")
     }
 }
 
 @Suite(.serialized) struct StdioClientCases {
     @Test func concurrentRequestsProgressAndShutdownOverOneChannel() async throws {
-        let transport = StdioClientTransport(configuration: .init(executable: .path(FilePath(try fixture()))))
-        try await withStdio(transport) { client in
+        let trace = StdioStartupTrace("StdioClientCases.concurrentRequestsProgressAndShutdownOverOneChannel")
+        let transport = StdioClientTransport(configuration: .init(executable: .path(FilePath(try fixture())),
+            standardError: { trace.fixtureLine($0) }))
+        try await withStdio(transport, trace: trace) { client in
             #expect(try await client.listTools().items.count == 5)
             // Four requests in flight on the shared channel are routed back by id.
             try await withThrowingTaskGroup(of: String.self) { group in
