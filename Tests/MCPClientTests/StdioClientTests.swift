@@ -30,6 +30,9 @@ private func withStdio(_ transport: StdioClientTransport, trace: StdioStartupTra
             else { try await transport.run() }
         }
         let client = Client(transport: transport)
+        #if CORE53_DIAGNOSTICS
+        trace?.mark("client.id=\(ObjectIdentifier(client))")
+        #endif
         // run() is ready once exchanges are accepted; discover doubles as the readiness probe.
         let end = ContinuousClock.now.advanced(by: .seconds(30))
         while true {

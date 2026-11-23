@@ -1,10 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 import Foundation
+#if CORE53_DIAGNOSTICS
+import Dispatch
+#endif
 import JSON
 import JSONSchema
 import MCPJSONSchemaAdapter
 import MCPProtocol
 import Synchronization
+
+#if CORE53_DIAGNOSTICS
+// Diagnostic branch only; no payload logging and no public API change.
+private func core53WireTrace(_ validator: WireValidator, _ event: String) {
+    let line = "[core53-wire] pid=\(ProcessInfo.processInfo.processIdentifier) tick_ns=\(DispatchTime.now().uptimeNanoseconds) validator=\(validator.core53ID) \(event)\n"
+    FileHandle.standardError.write(Data(line.utf8))
+}
+#endif
 
 /// A client for MCP revision 2026-07-28.
 ///
@@ -163,11 +174,17 @@ public actor Client {
             let body = try request(id: id, method: method, params: params + continuation, progressToken: token, logs: onLog != nil)
             let final = Mutex<JSON?>(nil)
             let validator = self.validator, limits = configuration.limits
+            #if CORE53_DIAGNOSTICS
+            core53WireTrace(validator, "event=exchange.begin client=\(ObjectIdentifier(self)) method=\(method) id=\(id)")
+            #endif
             try await transport.exchange(OutgoingRequest(id: .integer(JSONNumber(integer: id)), method: method, name: name, body: body, parameterHeaders: parameterHeaders)) { frame in
                 let message = try WireCodec.parse(Array(frame), limits: limits).result
                 guard let object = message.objectValue else { throw ClientError.invalidResponse("message is not an object") }
                 if object["id"] != nil, object["method"] == nil {
                     guard Self.matches(object["id"], id) else { throw ClientError.invalidResponse("response for another request") }
+                    #if CORE53_DIAGNOSTICS
+                    core53WireTrace(validator, "event=response.parsed method=\(method) id=\(id)")
+                    #endif
                     try final.withLock { value in
                         guard value == nil else { throw ClientError.invalidResponse("second response") }
                         value = message
@@ -178,6 +195,9 @@ public actor Client {
                 try await Self.dispatch(notification, params: object["params"], raw: message, token: token, validator: validator,
                                         onProgress: onProgress, onLog: onLog, onEvent: onEvent)
             }
+            #if CORE53_DIAGNOSTICS
+            core53WireTrace(validator, "event=exchange.end method=\(method) id=\(id)")
+            #endif
             guard let response = final.withLock({ $0 })?.objectValue else { throw ClientError.noResponse }
             if let error = response["error"] {
                 let failure = Self.serverError(error)
@@ -207,7 +227,15 @@ public actor Client {
                 }
                 if let state = object["requestState"] { continuation.append(JSONMember("requestState", value: state)) }
             case "complete":
+                #if CORE53_DIAGNOSTICS
+                if let definition {
+                    core53WireTrace(validator, "event=validation.await.begin method=\(method) id=\(id)")
+                    guard try await validator.validate(result, as: definition) else { throw ClientError.invalidResponse("\(method) result") }
+                    core53WireTrace(validator, "event=validation.await.end method=\(method) id=\(id)")
+                }
+                #else
                 if let definition { guard try await validator.validate(result, as: definition) else { throw ClientError.invalidResponse("\(method) result") } }
+                #endif
                 return result
             default:
                 guard acceptsExtensionResults, try await validator.validate(result, as: .Result) else {
@@ -325,6 +353,9 @@ public actor Client {
 
 /// Compiles frozen 2026-07-28 definitions on first use and validates against them.
 actor WireValidator {
+    #if CORE53_DIAGNOSTICS
+    nonisolated let core53ID = UUID()
+    #endif
     private var document: FrozenWireDocument?
     private var plans: [FrozenWireDefinition: WireDefinitionPlan] = [:]
 
@@ -355,15 +386,47 @@ actor WireValidator {
     }
 
     func validate(_ value: JSON, as definition: FrozenWireDefinition) throws -> Bool {
+        #if CORE53_DIAGNOSTICS
+        let compiled = try plan(definition)
+        core53WireTrace(self, "event=evaluate.begin definition=\(definition)")
+        let valid = try compiled.validate(value, limits: Self.compileLimits).result
+        core53WireTrace(self, "event=evaluate.end definition=\(definition) valid=\(valid)")
+        return valid
+        #else
         try plan(definition).validate(value, limits: Self.compileLimits).result
+        #endif
     }
 
     private func plan(_ definition: FrozenWireDefinition) throws -> WireDefinitionPlan {
+        #if CORE53_DIAGNOSTICS
+        if let plan = plans[definition] {
+            core53WireTrace(self, "event=plan.hit definition=\(definition)")
+            return plan
+        }
+        let document: FrozenWireDocument
+        if let cached = self.document { document = cached }
+        else {
+            core53WireTrace(self, "event=schema.read.begin")
+            let bytes = try FrozenWireSchema.read(maximumBytes: FrozenWireSchema.byteCount)
+            core53WireTrace(self, "event=schema.read.end")
+            core53WireTrace(self, "event=schema.parse.begin")
+            document = try FrozenWireSchema.parse(bytes, limits: Self.compileLimits).result
+            core53WireTrace(self, "event=schema.parse.end")
+        }
+        self.document = document
+        core53WireTrace(self, "event=schema.root.begin definition=\(definition)")
+        let root = try document.root(at: definition, limits: Self.compileLimits).result
+        core53WireTrace(self, "event=schema.root.end definition=\(definition)")
+        core53WireTrace(self, "event=schema.compile.begin definition=\(definition)")
+        let plan = try WireDefinitionPlan.compile(root, limits: Self.compileLimits).result
+        core53WireTrace(self, "event=schema.compile.end definition=\(definition)")
+        #else
         if let plan = plans[definition] { return plan }
         let document = try self.document ?? FrozenWireSchema.parse(FrozenWireSchema.read(maximumBytes: FrozenWireSchema.byteCount), limits: Self.compileLimits).result
         self.document = document
         let root = try document.root(at: definition, limits: Self.compileLimits).result
         let plan = try WireDefinitionPlan.compile(root, limits: Self.compileLimits).result
+        #endif
         plans[definition] = plan
         return plan
     }

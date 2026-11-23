@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 import Foundation
+#if CORE53_DIAGNOSTICS
+import Dispatch
+#endif
 import Synchronization
 import MCPClientStdio
 
@@ -22,7 +25,12 @@ final class StdioStartupTrace: Sendable {
         let line = state.withLock { state -> String in
             state.sequence += 1
             let elapsed = started.duration(to: ContinuousClock.now)
-            return "[core53] pid=\(ProcessInfo.processInfo.processIdentifier) test=\(testName) seq=\(state.sequence) elapsed=\(elapsed) event=\(event)\n"
+            #if CORE53_DIAGNOSTICS
+            let tick = "tick_ns=\(DispatchTime.now().uptimeNanoseconds) "
+            #else
+            let tick = ""
+            #endif
+            return "[core53] \(tick)pid=\(ProcessInfo.processInfo.processIdentifier) test=\(testName) seq=\(state.sequence) elapsed=\(elapsed) event=\(event)\n"
         }
         FileHandle.standardError.write(Data(line.utf8))
     }
@@ -50,6 +58,9 @@ final class StdioStartupTrace: Sendable {
     }
 
     func run(_ transport: StdioClientTransport) async throws {
+        #if CORE53_DIAGNOSTICS
+        mark("transport.id=\(ObjectIdentifier(transport))")
+        #endif
         mark("run.enter")
         do {
             try await transport.run()

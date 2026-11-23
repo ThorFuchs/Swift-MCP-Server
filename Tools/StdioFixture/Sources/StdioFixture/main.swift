@@ -7,6 +7,9 @@ import Glibc
 import Musl
 #endif
 import Foundation
+#if CORE53_DIAGNOSTICS
+import Dispatch
+#endif
 import JSON
 import MCPProtocol
 import MCPServer
@@ -16,11 +19,29 @@ import SystemPackage
 @main struct Fixture {
     static func parse(_ text: String) throws -> JSON { try JSONParser().parseWithReport(Array(text.utf8)).result }
     static func diagnostic(_ text: String) {
+        #if CORE53_DIAGNOSTICS
+        // Preserve the termination reason independently of the parent stderr-reader lifetime.
+        if let directory = ProcessInfo.processInfo.environment["MCP_CORE53_TRACE_DIR"],
+           ["START", "PREPARE_BEGIN", "PREPARE_END", "POLICY", "READY", "STOP", "CLEAN", "FAIL"].contains(where: { text.hasPrefix($0) }) {
+            let pid = ProcessInfo.processInfo.processIdentifier
+            let tick = DispatchTime.now().uptimeNanoseconds
+            let line = "[core53-fixture] pid=\(pid) tick_ns=\(tick) event=\(text)\n"
+            let file = URL(fileURLWithPath: directory, isDirectory: true)
+                .appendingPathComponent("fixture-\(pid)-\(tick)-\(UUID().uuidString).log")
+            do { try Data(line.utf8).write(to: file, options: .atomic) }
+            catch {
+                FileHandle.standardError.write(Data("[core53-fixture] evidence.write.error \(error)\n".utf8))
+            }
+        }
+        #endif
         try? FileHandle.standardError.write(contentsOf:Data((text+"\n").utf8))
     }
     static func main() async {
         // Application boundary only: explicitly test default SIGPIPE disposition.
         signal(SIGPIPE,SIG_DFL)
+        #if CORE53_DIAGNOSTICS
+        diagnostic("START")
+        #endif
         do {
             let mode = CommandLine.arguments.dropFirst().first ?? "normal"
             let large = String(repeating:"x",count:131_072)
@@ -51,9 +72,15 @@ import SystemPackage
             }
             let cursor = try CursorProtector(keys:[.init(identifier:ScalarText("fixture"),material:Data(repeating:7,count:32))],
                 active:ScalarText("fixture"),clock:{1000})
+            #if CORE53_DIAGNOSTICS
+            diagnostic("PREPARE_BEGIN")
+            #endif
             let server = try await Server.make(info:parse(#"{"name":"stdio-fixture","version":"1"}"#),
                 catalog:ServerCatalog(tools:[echo,slow,big,publish,delayed]),cursors:cursor,
                 configuration:ServerConfiguration(activeRequests:4,queuedRequests:4,requestsPerPrincipal:4,terminalWork:900_000,deadlineMilliseconds:10_000,bufferedBytes:33_554_432))
+            #if CORE53_DIAGNOSTICS
+            diagnostic("PREPARE_END")
+            #endif
             let policy: StdioPolicy
             switch mode {
             case "tiny": policy = try .init(frameBytes:128,chunkBytes:7,queuedBytes:128)
@@ -66,6 +93,9 @@ import SystemPackage
             case "uncooperative": policy = try .init(drainMilliseconds:50)
             default: policy = try .init(chunkBytes:7,workers:4,drainMilliseconds:500)
             }
+            #if CORE53_DIAGNOSTICS
+            diagnostic("POLICY readIdleMilliseconds=\(policy.readIdleMilliseconds) frameMilliseconds=\(policy.frameMilliseconds) writeIdleMilliseconds=\(policy.writeIdleMilliseconds) drainMilliseconds=\(policy.drainMilliseconds)")
+            #endif
             let transport = try StdioTransport(input:.standardInput,output:.standardOutput,
                 inputOwnership:.owned,outputOwnership:.owned,policy:policy)
             diagnostic("READY")

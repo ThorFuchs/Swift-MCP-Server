@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 import Foundation
+#if CORE53_DIAGNOSTICS
+import Dispatch
+#endif
 import JSON
 import MCPClient
 import MCPProtocol
@@ -70,6 +73,13 @@ public final class StdioClientTransport: ClientTransport, Sendable {
 
     public init(configuration: Configuration) { self.configuration = configuration }
 
+    #if CORE53_DIAGNOSTICS
+    private func core53ProcessTrace(_ event: String) {
+        let line = "[core53-process] pid=\(ProcessInfo.processInfo.processIdentifier) tick_ns=\(DispatchTime.now().uptimeNanoseconds) transport=\(ObjectIdentifier(self)) \(event)\n"
+        FileHandle.standardError.write(Data(line.utf8))
+    }
+    #endif
+
     // MARK: Lifetime
 
     /// Launches the server and serves exchanges until it exits, `shutdown()` closes its
@@ -89,7 +99,10 @@ public final class StdioClientTransport: ClientTransport, Sendable {
         let setup = Subprocess.Configuration(executable: configuration.executable, arguments: Arguments(configuration.arguments),
             environment: environment, workingDirectory: configuration.workingDirectory.map { FilePath($0) }, platformOptions: options)
         let limit = configuration.maximumMessageBytes, errors = configuration.standardError
-        _ = try await Subprocess.run(setup, input: .inputWriter, output: .sequence, error: .sequence) { execution in
+        let result = try await Subprocess.run(setup, input: .inputWriter, output: .sequence, error: .sequence) { execution in
+            #if CORE53_DIAGNOSTICS
+            self.core53ProcessTrace("event=child.launched child_pid=\(execution.processIdentifier.value)")
+            #endif
             try await withThrowingTaskGroup(of: Void.self) { group in
                 group.addTask {
                     for await line in lines { _ = try await execution.standardInputWriter.write(line) }
@@ -107,12 +120,20 @@ public final class StdioClientTransport: ClientTransport, Sendable {
                         try await self.route(Data(line))
                     }
                 }
+                #if CORE53_DIAGNOSTICS
+                self.core53ProcessTrace("event=stdout.eof child_pid=\(execution.processIdentifier.value)")
+                #endif
                 // The server closed its output: stop writing and end the run.
                 outgoing.finish()
                 group.cancelAll()
                 _ = try? await group.waitForAll()
             }
         }
+        #if CORE53_DIAGNOSTICS
+        core53ProcessTrace("event=child.terminated child_pid=\(result.processIdentifier.value) status=\(String(reflecting: result.terminationStatus))")
+        #else
+        _ = result.terminationStatus
+        #endif
     }
 
     /// Closes the server's standard input, the graceful shutdown signal; `run()` returns

@@ -45,6 +45,9 @@ private func ready(_ client: Client, trace: StdioStartupTrace? = nil) async thro
         try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask { try await trace.run(transport) }
             let client = Client(transport: transport)
+            #if CORE53_DIAGNOSTICS
+            trace.mark("client.id=\(ObjectIdentifier(client))")
+            #endif
             try await ready(client, trace: trace)
             trace.mark("listen.begin")
             let acknowledged = Mutex(false)
