@@ -15,12 +15,18 @@ import Testing
 
         try await withThrowingTaskGroup(of: Void.self) { group in
             for _ in 0..<16 {
-                group.addTask {
+                group.addTask { () async throws -> Void in
                     let validator = WireValidator(frozenPlans: cache)
-                    #expect(try await validator.validate(implementation, as: .Implementation))
-                    #expect(try await !validator.validate(invalidImplementation, as: .Implementation))
-                    #expect(try await validator.validate(discovery, as: .DiscoverResult))
-                    #expect(try await !validator.validate(.null, as: .DiscoverResult))
+                    // Evaluate throwing actor calls before expanding the nonthrowing
+                    // assertion macros inside the task-group child closure.
+                    let validImplementation = try await validator.validate(implementation, as: .Implementation)
+                    #expect(validImplementation)
+                    let invalidImplementationAccepted = try await validator.validate(invalidImplementation, as: .Implementation)
+                    #expect(!invalidImplementationAccepted)
+                    let validDiscovery = try await validator.validate(discovery, as: .DiscoverResult)
+                    #expect(validDiscovery)
+                    let invalidDiscoveryAccepted = try await validator.validate(.null, as: .DiscoverResult)
+                    #expect(!invalidDiscoveryAccepted)
                 }
             }
             try await group.waitForAll()
