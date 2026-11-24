@@ -69,6 +69,8 @@ let package = Package(
         .testTarget(name: "MCPSkillsClientTests", dependencies: [.product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux])), "MCPSkillsClient", "MCPSkills", "MCPClient", "MCPServer", "MCPServerTesting", "MCPProtocol", .product(name: "JSON", package: "swift-json")]),
         .testTarget(name: "MCPSkillsTests", dependencies: [.product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux])), "MCPSkills", "MCPSkillsFormat", "MCPServer", "MCPProtocol", .product(name: "JSON", package: "swift-json")]),
         .testTarget(name: "MCPServerTestingTests", dependencies: ["MCPServerTesting", "MCPServer", "MCPProtocol", .product(name: "JSON", package: "swift-json")], exclude: ["TEST_PLAN.md"]),
+        // Keep lifecycle probes independent of the original 26-client-test diagnostic population.
+        .testTarget(name: "MCPClientStdioLifecycleTests", dependencies: ["MCPClientStdio", "MCPClient", "MCPProtocol", .product(name: "JSON", package: "swift-json"), .product(name: "Subprocess", package: "swift-subprocess")]),
         .testTarget(name: "MCPJSONSchemaAdapterTests", dependencies: ["MCPJSONSchemaAdapter", .product(name: "JSON", package: "swift-json"), .product(name: "JSONSchema", package: "swift-json")], exclude: ["TEST_PLAN.md"]),
     ],
     swiftLanguageModes: [.v6]
