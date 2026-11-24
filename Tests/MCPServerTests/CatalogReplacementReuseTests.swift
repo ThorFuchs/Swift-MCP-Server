@@ -47,7 +47,8 @@ import Testing
         await #expect(throws: (any Error).self) {
             _ = try await SchemaPreparation.prepareReplacement(raw, previous: original, identifier: 2, budget: tiny)
         }
-        #expect(await tiny.snapshot.isTerminal && tiny.snapshot.activeReservations == 0)
+        let settled = await tiny.snapshot
+        #expect(settled.isTerminal && settled.activeReservations == 0)
     }
 
     @Test func replacingToolWithSameSchemaUsesNewProviderAndScope() async throws {

@@ -34,3 +34,5 @@ notifications, actual catalog mutations, correct IDs, zero failures and
 zero target warnings across repeated Debug/Release runs. Measure mutation
 preparation and publication times; retain failed runs. Do not merge a
 candidate just because the old warning disappears once. A2/#29 separate.
+
+First native CI [45459143847](https://github.com/ThorFuchs/Swift-MCP-Server/actions/runs/45459143847) on `4e17ae77860d0a7d7b5431ad71eea93159403b7f` failed before tests on both platforms: Swift Testing's autoclosure could not read the second actor-isolated snapshot property. The follow-up takes one awaited immutable snapshot and keeps both assertions; no production edits or test result claimed from that run.
