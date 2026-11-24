@@ -24,6 +24,32 @@ public enum SchemaPreparation {
         return .init(identifier: identifier, raw: raw, logicalRetainedUpperBound: compiled.1,
             generation: .init(identifier: identifier, raw: raw, plan: compiled.0, document: compiled.0.document))
     }
+    /// Only called for tool schemas previously prepared by this server's catalog
+    /// with the same default limits and empty registry. No provider, authority,
+    /// header plan, continuation, or extension registration is reused.
+    static func prepareReplacement(_ raw: JSON, previous: PreparedSchema?, identifier: UInt64,
+                                   budget: RequestBudget) async throws -> PreparedSchema {
+        guard let previous else { return try await prepare(raw, identifier: identifier, budget: budget) }
+        do {
+            // Exact preserved JSON bytes, not a semantic/numeric hash or name alone.
+            // Both serializations and the bounded byte comparison are charged to
+            // the new preparation account. The caller still validates the new tool
+            // definition and independently admits its retained weight.
+            let oldBytes = try await budget.performJSON { try WireCodec.write(previous.raw, limits: $0) }
+            let newBytes = try await budget.performJSON { try WireCodec.write(raw, limits: $0) }
+            try await budget.consume(UInt64(oldBytes.count) + UInt64(newBytes.count))
+            guard oldBytes == newBytes else {
+                return try await prepare(raw, identifier: identifier, budget: budget)
+            }
+            try await budget.consume(previous.logicalRetainedUpperBound)
+            try Task.checkCancellation()
+            return .init(identifier: identifier, raw: raw, logicalRetainedUpperBound: previous.logicalRetainedUpperBound,
+                generation: .init(identifier: identifier, raw: raw, plan: previous.generation.plan, document: previous.generation.document))
+        } catch {
+            await budget.terminate()
+            throw error
+        }
+    }
     public static func validate(_ instance: JSON, against prepared: PreparedSchema,
                                 budget: RequestBudget) async throws -> Bool {
         try await budget.performJSON { try SchemaValidatorAdapter.validate(instance, against: prepared.generation.plan, limits: $0) }.isValid
