@@ -36,3 +36,20 @@ First command needs no subprocess fixture for this new suite. Run against the ex
 
 The new suite's own tests are serialized to limit additional compile pressure; no existing suite/test policy changes. Existing A1.2 diagnostic matrix is tied to its immutable 26-test baseline SHA; do not apply its fixed test-count assertion to a future expanded suite without a reviewed new baseline.
 
+
+
+## A2.1 replay on integrated A1
+
+Original seven tests copied without body changes from PR #57 commit `a2c3d31db2e0bf062aba135ca4b3f37f69efb862` to the qualified Core `02958abee82c363b879aa013c38229edb9a1c116` (import merge `e98d03ce7a612fce9e1eeb6db4a27ec826dc6e44`). Historical native macOS [CI 45265755646](https://github.com/ThorFuchs/Swift-MCP-Server/actions/runs/45265755646/job/138012085888) actually recorded five failing tests, six issues, and two passing controls. The old PR description is pre-execution; the historical log is the authority. Reproduction on the new base is still required.
+
+Add six test-first public API contracts:
+- Partial successful listing and failed terminal refresh retain known, unvisited metadata until a successful terminal page; new observed definitions take effect on successful pages.
+- A later page repairs a rejected definition (latest accepted observation of a name).
+- A late in-flight continuation must not restore obsolete metadata after a newer successful refresh, while returning its own validated page.
+- For overlapping cursorless requests, the latest initiated refresh owns the right to commit; an older late completion does not overwrite it.
+- A call captures header routing and output schema together before its first suspension; a later refresh must not silently drop that call's validation.
+- A standalone opaque-cursor request is still supported and may update observed names without inferring any removals.
+
+The overlap tests use explicit one-use transport rendezvous, not delays to order requests; the 10-second timer is a failure bound for a missing rendezvous. All seven original test bodies remain unchanged; no existing assertions weakened. Thirteen test functions, one serialized new suite, no fixture or production changes. Expected new controls and failures require actual native execution; not a fresh RED claim.
+
+The choice is local metadata consistency, not a server revision protocol. A failed/cancelled page leaves metadata unchanged; a superseded valid page still returns its own validated view. Notification-only behavior remains explicit host refresh, no automatic network requests and no validation bypass. Full retained-byte/count limits and auth-context changes remain a separate audit; the tests do not assert a global server snapshot.

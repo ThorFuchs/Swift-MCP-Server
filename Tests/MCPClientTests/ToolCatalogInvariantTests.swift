@@ -35,6 +35,43 @@ private let stringOutput = #"{"type":"object","required":["value"],"properties":
 
 private enum CatalogScriptError: Error {
     case unexpectedRequest
+    case rendezvousDeadline
+}
+
+/// A single-use rendezvous: the transport admits the request, then waits
+/// until the test explicitly releases its response. The timer is a failure
+/// bound for a missing rendezvous, never a sequencing or performance threshold.
+private final class CatalogGate: Sendable {
+    private let entered = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
+    private let released = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
+
+    func pause() async throws {
+        entered.continuation.yield(())
+        entered.continuation.finish()
+        var iterator = released.stream.makeAsyncIterator()
+        guard await iterator.next() != nil else { throw CancellationError() }
+        try Task.checkCancellation()
+    }
+
+    func waitUntilEntered() async throws {
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                var iterator = self.entered.stream.makeAsyncIterator()
+                guard await iterator.next() != nil else { throw CancellationError() }
+            }
+            group.addTask {
+                try await Task.sleep(for: .seconds(10))
+                throw CatalogScriptError.rendezvousDeadline
+            }
+            defer { group.cancelAll() }
+            _ = try await group.next()
+        }
+    }
+
+    func open() {
+        released.continuation.yield(())
+        released.continuation.finish()
+    }
 }
 
 private struct CatalogStep: Sendable {
@@ -47,19 +84,20 @@ private struct CatalogStep: Sendable {
     let cursor: String?
     let payload: Payload
     let notifications: [String]
+    let gate: CatalogGate?
 
     init(method: String, name: String? = nil, cursor: String? = nil,
-         payload: Payload, notifications: [String] = []) {
+         payload: Payload, notifications: [String] = [], gate: CatalogGate? = nil) {
         self.method = method; self.name = name; self.cursor = cursor
-        self.payload = payload; self.notifications = notifications
+        self.payload = payload; self.notifications = notifications; self.gate = gate
     }
 
-    static func list(_ tools: [String], cursor: String? = nil, next: String? = nil) -> Self {
-        .init(method: "tools/list", cursor: cursor, payload: .result(catalogResult(tools, next: next)))
+    static func list(_ tools: [String], cursor: String? = nil, next: String? = nil, gate: CatalogGate? = nil) -> Self {
+        .init(method: "tools/list", cursor: cursor, payload: .result(catalogResult(tools, next: next)), gate: gate)
     }
 
-    static func call(_ name: String, structured: String? = nil) -> Self {
-        .init(method: "tools/call", name: name, payload: .result(toolResult(structured)))
+    static func call(_ name: String, structured: String? = nil, gate: CatalogGate? = nil) -> Self {
+        .init(method: "tools/call", name: name, payload: .result(toolResult(structured)), gate: gate)
     }
 
     static func removed(_ name: String) -> Self {
@@ -89,6 +127,7 @@ private actor CatalogTransport: ClientTransport {
         }
         steps.removeFirst()
         requests.append(request)
+        if let gate = step.gate { try await gate.pause() }
         let key: String, payload: String
         switch step.payload {
         case .result(let result): key = "result"; payload = result
@@ -299,5 +338,150 @@ private actor CatalogTransport: ClientTransport {
         #expect(headers == [[]])
         let remaining = await transport.remaining()
         #expect(remaining == 0)
+    }
+}
+
+
+extension ToolCatalogInvariantCases {
+    @Test func partialRefreshRetiresMetadataOnlyAfterSuccessfulTerminalPage() async throws {
+        let transport = CatalogTransport([
+            .list([catalogTool("legacy", header: "Legacy", outputSchema: numericOutput)]),
+            .list([catalogTool("weather", header: "Region")], next: "tail"),
+            .call("legacy", structured: #"{"value":"wrong"}"#),
+            .init(method: "tools/list", cursor: "tail", payload: .result(
+                #"{"resultType":"complete","tools":[]}"#)),
+            .call("legacy", structured: #"{"value":1}"#),
+            .list([catalogTool("other", header: "Zone")], cursor: "tail"),
+            .call("legacy")
+        ])
+        let client = Client(transport: transport)
+        let arguments = try parseCatalogJSON(#"{"region":"west"}"#)
+        _ = try await client.listTools()
+        let head = try await client.listTools()
+        #expect(head.nextCursor == "tail")
+        await #expect(throws: ClientError.invalidResponse("structuredContent of legacy does not match its outputSchema")) {
+            _ = try await client.callTool("legacy", arguments: arguments)
+        }
+        await #expect(throws: ClientError.self) { _ = try await client.listTools(cursor: "tail") }
+        #expect(try await client.callTool("legacy", arguments: arguments).structuredContent != nil)
+        let tail = try await client.listTools(cursor: "tail")
+        #expect(tail.nextCursor == nil && tail.items.map(\.name) == ["other"])
+        #expect(try await client.callTool("legacy", arguments: arguments).text == "ok")
+        #expect(await transport.headers(for: "legacy") == [["Mcp-Param-Legacy: west"], ["Mcp-Param-Legacy: west"], []])
+        #expect(await transport.remaining() == 0)
+    }
+
+    @Test func repairedToolOnLaterPageReplacesRejection() async throws {
+        let transport = CatalogTransport([
+            .list([catalogTool("weather", header: "Bad Name")], next: "next"),
+            .list([catalogTool("weather", header: "Region")], cursor: "next"),
+            .call("weather")
+        ])
+        let client = Client(transport: transport)
+        let arguments = try parseCatalogJSON(#"{"region":"west"}"#)
+        #expect(try await client.listTools().items.isEmpty)
+        let rejected = await client.rejectedTools
+        #expect(rejected.map(\.name) == ["weather"])
+        #expect(try await client.listTools(cursor: "next").items.map(\.name) == ["weather"])
+        #expect(await client.rejectedTools.isEmpty)
+        _ = try await client.callTool("weather", arguments: arguments)
+        #expect(await transport.headers(for: "weather") == [["Mcp-Param-Region: west"]])
+        #expect(await transport.remaining() == 0)
+    }
+
+    @Test func lateContinuationCannotRestoreRetiredMetadata() async throws {
+        let gate = CatalogGate()
+        defer { gate.open() }
+        let transport = CatalogTransport([
+            .list([catalogTool("head")], next: "old"),
+            .list([catalogTool("retired", header: "OldRegion", outputSchema: numericOutput)], cursor: "old", gate: gate),
+            .list([]),
+            .call("retired")
+        ])
+        let client = Client(transport: transport)
+        let arguments = try parseCatalogJSON(#"{"region":"west"}"#)
+        _ = try await client.listTools()
+        async let delayed = client.listTools(cursor: "old")
+        try await gate.waitUntilEntered()
+        #expect(try await client.listTools().items.isEmpty)
+        gate.open()
+        let page = try await delayed
+        // The old caller still receives its validated page, not fabricated data.
+        #expect(page.items.map(\.name) == ["retired"])
+        #expect(try await client.callTool("retired", arguments: arguments).text == "ok")
+        #expect(await transport.headers(for: "retired") == [[]])
+        #expect(await transport.remaining() == 0)
+    }
+
+    @Test func earlierHeadCannotOverwriteLaterStartedSuccessfulRefresh() async throws {
+        let gate = CatalogGate()
+        defer { gate.open() }
+        let transport = CatalogTransport([
+            .list([catalogTool("weather", header: "OldRegion", outputSchema: numericOutput)], gate: gate),
+            .list([catalogTool("weather", header: "Region", outputSchema: stringOutput)]),
+            .call("weather", structured: #"{"value":"warm"}"#)
+        ])
+        let client = Client(transport: transport)
+        let arguments = try parseCatalogJSON(#"{"region":"west"}"#)
+        async let earlier = client.listTools()
+        try await gate.waitUntilEntered()
+        #expect(try await client.listTools().items.map(\.name) == ["weather"])
+        gate.open()
+        let olderPage = try await earlier
+        let oldSchema = try parseCatalogJSON(numericOutput)
+        #expect(olderPage.items.first?.outputSchema == oldSchema)
+        #expect(try await client.callTool("weather", arguments: arguments).structuredContent != nil)
+        #expect(await transport.headers(for: "weather") == [["Mcp-Param-Region: west"]])
+        #expect(await transport.remaining() == 0)
+    }
+
+    @Test func inFlightCallStillValidatesSchemaCapturedBeforeRefresh() async throws {
+        let gate = CatalogGate()
+        defer { gate.open() }
+        let transport = CatalogTransport([
+            .list([catalogTool("weather", header: "Region", outputSchema: numericOutput)]),
+            .call("weather", structured: #"{"value":"wrong"}"#, gate: gate),
+            .list([]),
+            .call("weather")
+        ])
+        let client = Client(transport: transport)
+        let arguments = try parseCatalogJSON(#"{"region":"west"}"#)
+        _ = try await client.listTools()
+        async let pending = client.callTool("weather", arguments: arguments)
+        try await gate.waitUntilEntered()
+        #expect(try await client.listTools().items.isEmpty)
+        gate.open()
+        do {
+            _ = try await pending
+            Issue.record("The in-flight call lost its advertised output schema")
+        } catch let error as ClientError {
+            #expect(error == .invalidResponse("structuredContent of weather does not match its outputSchema"))
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+        #expect(try await client.callTool("weather", arguments: arguments).text == "ok")
+        #expect(await transport.headers(for: "weather") == [["Mcp-Param-Region: west"], []])
+        #expect(await transport.remaining() == 0)
+    }
+
+    @Test func standaloneCursorPageUpdatesObservedToolButDoesNotRetireOthers() async throws {
+        let transport = CatalogTransport([
+            .list([catalogTool("known", header: "Known")]),
+            .list([catalogTool("other", header: "Zone", outputSchema: numericOutput)], cursor: "external"),
+            .call("other", structured: #"{"value":"wrong"}"#),
+            .call("known")
+        ])
+        let client = Client(transport: transport)
+        let arguments = try parseCatalogJSON(#"{"region":"west"}"#)
+        _ = try await client.listTools()
+        let page = try await client.listTools(cursor: "external")
+        #expect(page.items.map(\.name) == ["other"])
+        await #expect(throws: ClientError.invalidResponse("structuredContent of other does not match its outputSchema")) {
+            _ = try await client.callTool("other", arguments: arguments)
+        }
+        _ = try await client.callTool("known", arguments: arguments)
+        #expect(await transport.headers(for: "other") == [["Mcp-Param-Zone: west"]])
+        #expect(await transport.headers(for: "known") == [["Mcp-Param-Known: west"]])
+        #expect(await transport.remaining() == 0)
     }
 }
