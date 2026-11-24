@@ -169,7 +169,7 @@ private func exClean(_ server: Server) async {
     @Test func extensionCancellationDoesNotCrossPrincipalOrCurrentNegotiation() async throws {
         let entered = Mutex(Set<ScalarText>())
         let registration = try exRegistration { _, context in
-            entered.withLock { $0.insert(context.principal.subject) }
+            _ = entered.withLock { $0.insert(context.principal.subject) }
             while true { try context.checkCancellation(); await Task.yield() }
         }
         let server = try await exServer([registration])

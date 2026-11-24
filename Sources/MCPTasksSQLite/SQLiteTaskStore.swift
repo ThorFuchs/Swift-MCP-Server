@@ -202,7 +202,7 @@ public final class SQLiteTaskStore: TaskStore {
                 .integer(record.cancellationRequested ? 1 : 0),
             ]
             let fixed = [record.id, record.owner.issuer, record.owner.subject, record.owner.resource].reduce(0) { $0 + $1.utf8.count }
-            guard values.reduce(fixed + 64) { $0 + $1.byteCount } <= rowBytes else { throw TaskStoreError.payloadTooLarge }
+            guard values.reduce(fixed + 64, { $0 + $1.byteCount }) <= rowBytes else { throw TaskStoreError.payloadTooLarge }
         }
     }
 

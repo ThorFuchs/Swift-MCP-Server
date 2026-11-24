@@ -61,7 +61,7 @@ public struct ClientConfiguration: Sendable {
         if sampling != nil { members.append(JSONMember("sampling", value: empty)) }
         if roots != nil { members.append(JSONMember("roots", value: empty)) }
         if !extensions.isEmpty {
-            let declared = try extensions.sorted { $0.key < $1.key }.map { JSONMember($0.key, value: $0.value) }
+            let declared = extensions.sorted { $0.key < $1.key }.map { JSONMember($0.key, value: $0.value) }
             members.append(JSONMember("extensions", value: .object(try JSONObject(members: declared))))
         }
         return .object(try JSONObject(members: members))
