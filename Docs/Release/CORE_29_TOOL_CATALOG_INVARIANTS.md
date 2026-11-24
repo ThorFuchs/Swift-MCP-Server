@@ -53,3 +53,10 @@ Add six test-first public API contracts:
 The overlap tests use explicit one-use transport rendezvous, not delays to order requests; the 10-second timer is a failure bound for a missing rendezvous. All seven original test bodies remain unchanged; no existing assertions weakened. Thirteen test functions, one serialized new suite, no fixture or production changes. Expected new controls and failures require actual native execution; not a fresh RED claim.
 
 The choice is local metadata consistency, not a server revision protocol. A failed/cancelled page leaves metadata unchanged; a superseded valid page still returns its own validated view. Notification-only behavior remains explicit host refresh, no automatic network requests and no validation bypass. Full retained-byte/count limits and auth-context changes remain a separate audit; the tests do not assert a global server snapshot.
+
+
+Additional test-first controls: canonically equivalent but byte-distinct
+opaque cursors must not complete a chain; a later failed head leaves
+previously validated metadata intact and supersedes an older in-flight
+head. Scripted transport compares cursor identities via existing ScalarText.
+Fifteen total public test functions; seven original test bodies unchanged.

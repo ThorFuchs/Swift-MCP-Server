@@ -122,7 +122,7 @@ private actor CatalogTransport: ClientTransport {
         let body = try parseCatalogJSON(String(decoding: request.body, as: UTF8.self))
         let cursor = body.objectValue?["params"]?.objectValue?["cursor"]?.stringValue
         guard let step = steps.first, request.method == step.method,
-              request.name == step.name, cursor == step.cursor else {
+              request.name == step.name, cursor.map(ScalarText.init) == step.cursor.map(ScalarText.init) else {
             throw CatalogScriptError.unexpectedRequest
         }
         steps.removeFirst()
@@ -482,6 +482,59 @@ extension ToolCatalogInvariantCases {
         _ = try await client.callTool("known", arguments: arguments)
         #expect(await transport.headers(for: "other") == [["Mcp-Param-Zone: west"]])
         #expect(await transport.headers(for: "known") == [["Mcp-Param-Known: west"]])
+        #expect(await transport.remaining() == 0)
+    }
+}
+
+
+extension ToolCatalogInvariantCases {
+    @Test func byteDistinctCursorCannotCompleteActiveListing() async throws {
+        let expected = "caf\u{00e9}"
+        let external = "cafe\u{0301}"
+        #expect(expected == external) // Swift String equality normalizes.
+        #expect(ScalarText(expected) != ScalarText(external))
+        let transport = CatalogTransport([
+            .list([catalogTool("known", header: "Known", outputSchema: numericOutput)]),
+            .list([catalogTool("head")], next: expected),
+            .list([catalogTool("other")], cursor: external),
+            .call("known", structured: #"{"value":"wrong"}"#)
+        ])
+        let client = Client(transport: transport)
+        let arguments = try parseCatalogJSON(#"{"region":"west"}"#)
+        _ = try await client.listTools()
+        let head = try await client.listTools()
+        let next = try #require(head.nextCursor)
+        #expect(ScalarText(next) == ScalarText(expected))
+        _ = try await client.listTools(cursor: external)
+        // A different opaque token cannot establish completion of the chain.
+        await #expect(throws: ClientError.invalidResponse("structuredContent of known does not match its outputSchema")) {
+            _ = try await client.callTool("known", arguments: arguments)
+        }
+        #expect(await transport.headers(for: "known") == [["Mcp-Param-Known: west"]])
+        #expect(await transport.remaining() == 0)
+    }
+
+    @Test func failedNewerHeadPreservesLastValidatedMetadataAndSupersedesOlderHead() async throws {
+        let gate = CatalogGate()
+        defer { gate.open() }
+        let transport = CatalogTransport([
+            .list([catalogTool("weather", header: "Region", outputSchema: numericOutput)]),
+            .list([catalogTool("weather", header: "OldRegion", outputSchema: stringOutput)], gate: gate),
+            .init(method: "tools/list", payload: .result(#"{"resultType":"complete","tools":[]}"#)),
+            .call("weather", structured: #"{"value":1}"#)
+        ])
+        let client = Client(transport: transport)
+        let arguments = try parseCatalogJSON(#"{"region":"west"}"#)
+        _ = try await client.listTools()
+        async let older = client.listTools()
+        try await gate.waitUntilEntered()
+        await #expect(throws: ClientError.self) { _ = try await client.listTools() }
+        gate.open()
+        let page = try await older
+        let oldSchema = try parseCatalogJSON(stringOutput)
+        #expect(page.items.first?.outputSchema == oldSchema)
+        #expect(try await client.callTool("weather", arguments: arguments).structuredContent != nil)
+        #expect(await transport.headers(for: "weather") == [["Mcp-Param-Region: west"]])
         #expect(await transport.remaining() == 0)
     }
 }
