@@ -92,3 +92,5 @@ opaque cursors must not complete a chain; a later failed head leaves
 previously validated metadata intact and supersedes an older in-flight
 head. Scripted transport compares cursor identities via existing ScalarText.
 Fifteen total public test functions; seven original test bodies unchanged.
+
+The cursor match uses existing MCPProtocol.ScalarText to preserve exact UTF-8 identity, rather than Swift String's canonical equivalence. Tool-name key semantics otherwise remain unchanged.

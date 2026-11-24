@@ -98,7 +98,8 @@ public actor Client {
             var observedNames: Set<String>?
             if head != nil {
                 observedNames = []
-            } else if let listing = toolListing, cursor == listing.nextCursor {
+            } else if let listing = toolListing, let cursor,
+                      ScalarText(cursor) == ScalarText(listing.nextCursor) {
                 observedNames = listing.observedNames
             }
             // An independent cursor page can update its own names, but cannot
