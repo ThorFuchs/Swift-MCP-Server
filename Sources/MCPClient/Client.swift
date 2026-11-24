@@ -115,7 +115,13 @@ public actor Client {
     }
 
     /// `completion/complete` for an argument of a prompt or resource template.
-    /// - Parameter previousArguments: values of arguments already chosen (`context.arguments`).
+    ///
+    /// - Parameters:
+    ///   - reference: The prompt or resource template being completed.
+    ///   - name: The name of the argument to complete.
+    ///   - value: The current argument value, including a partial value.
+    ///   - previousArguments: Values of arguments already chosen (`context.arguments`).
+    /// - Returns: Validated completion candidates and any reported pagination metadata.
     public func complete(_ reference: CompletionReference, argument name: String, value: String,
                          previousArguments: [String: String] = [:]) async throws -> Completion {
         var params = [JSONMember("ref", value: try reference.json),

@@ -56,8 +56,11 @@ public final class SQLiteTaskStore: TaskStore {
 
     /// Opens (and if needed creates and migrates) the task database described by `configuration`.
     ///
-    /// - Parameter maximumPayloadBytes: The byte limit for one stored JSON payload. Writes
-    ///   above it throw `TaskStoreError.payloadTooLarge`. Default 4 MiB.
+    /// - Parameters:
+    ///   - configuration: SQLite database configuration, including the path and resource limits.
+    ///   - maximumPayloadBytes: The byte limit for one stored JSON payload. Writes
+    ///     above it throw `TaskStoreError.payloadTooLarge`. Default 4 MiB.
+    /// - Returns: The opened, migrated task store.
     public static func open(_ configuration: SQLiteConfiguration, maximumPayloadBytes: Int = 4 << 20) async throws -> SQLiteTaskStore {
         guard maximumPayloadBytes > 0, maximumPayloadBytes * 2 + 65536 <= configuration.limits.hardMaxResultBytes else {
             throw SQLiteError.invalidConfiguration("maximumPayloadBytes must be positive and fit twice, plus 64 KiB, into limits.hardMaxResultBytes")

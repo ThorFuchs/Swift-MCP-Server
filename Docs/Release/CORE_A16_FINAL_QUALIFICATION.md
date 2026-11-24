@@ -90,3 +90,16 @@ The strengthened test needs native parallel-suite qualification on both
 platforms, followed by repeated Studio runs. An observed failure must
 still be investigated; the earlier macOS event is not retroactively declared
 a proven FD reuse event.
+
+
+## A1.6a/b native qualification and A1.6c documentation polish
+
+[CI run 45375891847](https://github.com/ThorFuchs/Swift-MCP-Server/actions/runs/45375891847) on exact commit `a29799e8f7227782cb9edc0992fd30913a12fef7`, 2026-11-24:
+
+- macOS ARM64, MacBook Pro: 325/325 test functions passed, including the strengthened descriptor-ownership test and all twelve new client invariant tests. All six dependency files remained byte-for-byte unchanged. No Swift compiler warnings observed.
+- Linux ARM64, Studio VM: 325/325 test functions passed, including descriptor ownership, both invariant suites, all 26 client tests and SQLite 1.2.0 store conformance. Dependency byte check passed; complete Linux job successful. No compiler warnings observed.
+- 650/650 test executions across the two platforms. The macOS ownership result in this run is from the MacBook, not the 16-core Studio; repeated native Studio runs remain required.
+- Native symbol graph extraction succeeded, and the first six DocC archives converted successfully. MCPClient conversion failed at `Client.complete` with three missing parameter descriptions (reference, name, value). Eight subsequent modules and the coverage inventory were not reached. This is a documentation failure, not a failed test or unresolved dependency.
+- A1.6c completes the parameter blocks in four public methods: Client.complete, TaskRuntime.start, SQLiteTaskStore.open(configuration:), and SkillCatalog.load(directory:prefix:configuration:). The first error is observed in native DocC; the other three incomplete parameter blocks are source-review findings, not measured native failures. No non-comment Swift code is changed.
+- The DocC script attempts every selected module even if an individual module's symbol graph is missing or its conversion fails. Failed conversion archives are removed; the aggregate status remains nonzero if any module fails. Strict resolver mode and `--warnings-as-errors` stay enabled. Local shell controls with mocked Swift/DocC passed all-success, first-module conversion failure with later-module success, and missing-graph failure with later-module success. These are shell control-flow tests, not native DocC receipts.
+- Required next receipt: native 15/15 DocC archives and a successful public-symbol inventory on the exact new candidate, plus unchanged full native test and dependency integrity gates. Optimized tests, repeated Studio qualification, HTTP interop, AMD64 and final merged-SHA validation are not complete. Keep #53 and the integration PR open.

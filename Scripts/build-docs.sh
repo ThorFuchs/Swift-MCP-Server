@@ -21,6 +21,10 @@ mkdir -p .build/docs
 swift package --scratch-path .build/docs/build --force-resolved-versions \
     dump-symbol-graph --minimum-access-level public
 
+# Convert every requested module so one documentation error does not hide
+# the diagnostics of the remaining catalogs. The overall gate still fails.
+passed=0
+failed=0
 for module in "$@"; do
     symbols=".build/docs/symbols/$module"
     archive=".build/docs/$module.doccarchive"
@@ -28,15 +32,28 @@ for module in "$@"; do
     mkdir -p "$symbols"
     find .build/docs/build -path '*symbolgraph*' -name "$module.symbols.json" \
         -exec cp {} "$symbols/" \; -quit
-    test -s "$symbols/$module.symbols.json"
+    if [[ ! -s "$symbols/$module.symbols.json" ]]; then
+        echo "DocC failed: $module (missing primary symbol graph)" >&2
+        failed=$((failed + 1))
+        continue
+    fi
     find .build/docs/build -path '*symbolgraph*' -name "$module@*.symbols.json" \
         -exec cp {} "$symbols/" \;
     bundle="com.github.thorfuchs.$(printf '%s' "$module" | tr '[:upper:]' '[:lower:]')"
-    "$DOCC" convert "Sources/$module/$module.docc" \
+    echo "Converting DocC: $module"
+    if "$DOCC" convert "Sources/$module/$module.docc" \
         --fallback-display-name "$module" \
         --fallback-bundle-identifier "$bundle" \
         --additional-symbol-graph-dir "$symbols" \
         --warnings-as-errors \
-        --output-path "$archive"
-    echo "DocC archive: $archive"
+        --output-path "$archive"; then
+        echo "DocC archive: $archive"
+        passed=$((passed + 1))
+    else
+        rm -rf "$archive"
+        echo "DocC failed: $module" >&2
+        failed=$((failed + 1))
+    fi
 done
+printf 'DocC summary: %d/%d archives built, %d failed.\n' "$passed" "$#" "$failed"
+[[ "$failed" -eq 0 ]]
