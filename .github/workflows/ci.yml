@@ -4,6 +4,12 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      qualify_release:
+        description: Run optimized tests in addition to the normal suite
+        required: false
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -24,7 +30,25 @@ jobs:
         with:
           persist-credentials: false
       - run: swift --version
-      - run: Scripts/test.sh
+      - name: Verify unified lockfile pins and manifest hashes
+        run: python3 Scripts/check-core-dependency-pins.py
+      - name: Test locked Core and stdio dependency graph
+        env:
+          MCP_STRICT_RESOLUTION: "1"
+        run: Scripts/test.sh
+      - name: Optimized release qualification
+        if: github.event_name == 'workflow_dispatch' && inputs.qualify_release
+        env:
+          MCP_STRICT_RESOLUTION: "1"
+          MCP_FIXTURE_CONFIGURATION: release
+        run: Scripts/test.sh -c release
+      - name: Build all public DocC archives
+        run: bash Scripts/build-docs.sh
+      - name: Inventory public symbol documentation
+        run: python3 Scripts/audit-docs.py
+      - name: Verify no tracked Core and stdio lockfile drift
+        if: always()
+        run: git diff --exit-code -- Package.resolved Examples/StdioServer/Package.resolved Tools/StdioFixture/Package.resolved
       # Research Explorer is CI-tested independently in ThorFuchs/Swift-MCP-Examples.
       # Keep Core CI scoped to the SDK and its own stdio fixtures.
 
@@ -47,4 +71,16 @@ jobs:
         run: |
           uname -sm
           swift --version
-      - run: Scripts/test.sh
+      - name: Test locked Core and stdio dependency graph
+        env:
+          MCP_STRICT_RESOLUTION: "1"
+        run: Scripts/test.sh
+      - name: Optimized release qualification
+        if: github.event_name == 'workflow_dispatch' && inputs.qualify_release
+        env:
+          MCP_STRICT_RESOLUTION: "1"
+          MCP_FIXTURE_CONFIGURATION: release
+        run: Scripts/test.sh -c release
+      - name: Verify no tracked Core and stdio lockfile drift
+        if: always()
+        run: git diff --exit-code -- Package.resolved Examples/StdioServer/Package.resolved Tools/StdioFixture/Package.resolved

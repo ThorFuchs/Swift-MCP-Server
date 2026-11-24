@@ -92,6 +92,13 @@ fail on purpose because their binaries are missing. They are never skipped silen
 Process: [ADR-0001](Docs/ADR/0001-lean-process.md) (pull requests, CI, short ADRs).
 Design notes are in [`Docs/`](Docs).
 
+
+For the release qualification path, run `python3 Scripts/check-core-dependency-pins.py`
+and `MCP_STRICT_RESOLUTION=1 Scripts/test.sh`. To test optimized source and fixtures,
+run `MCP_STRICT_RESOLUTION=1 MCP_FIXTURE_CONFIGURATION=release Scripts/test.sh -c release`.
+The documentation inventory is available with `python3 Scripts/audit-docs.py` after
+building the DocC archives.
+
 ## Known issues
 
 - Some design documents still refer to the retired gate process (Q01–Q11, P00–P12).
