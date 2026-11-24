@@ -56,7 +56,7 @@ private final class CapturedStderr: Sendable {
 
     @Test func signaledChildMustNotReturnSuccess() async {
         // Only the controlled test child signals itself.
-        let transport = shell("kill -KILL $")
+        let transport = shell("kill -KILL $$")
         await #expect(throws: StdioClientTransportError.unsuccessfulTermination(.signaled(9))) {
             try await transport.run()
         }
@@ -90,7 +90,7 @@ private final class CapturedStderr: Sendable {
         try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask { try await transport.run() }
             var iterator = ready.makeAsyncIterator()
-            let started = await iterator.next()
+            let started: Void? = await iterator.next()
             try #require(started != nil)
             group.cancelAll()
             do {
@@ -145,7 +145,7 @@ private final class CapturedStderr: Sendable {
         try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask { try await transport.run() }
             var iterator = ready.makeAsyncIterator()
-            let started = await iterator.next()
+            let started: Void? = await iterator.next()
             try #require(started != nil)
             let request = OutgoingRequest(id: .integer(JSONNumber(integer: 1)),
                 method: "server/discover", name: nil,
