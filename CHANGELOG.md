@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Client frozen wire preparation: share only immutable, hash-verified protocol plans
+  within finite retention limits; validate each response independently. No change to
+  the public client API or the original idle deadlines (ADR-0007).
+- Stdio client: settle exchanges at stdout EOF, retain stderr until the child has
+  completed cleanup, join owned tasks and propagate exact unsuccessful child
+  termination. The additive `unsuccessfulTermination` error case affects exhaustive
+  switches; caller cancellation remains cancellation (ADR-0008).
+- Align Core and the local stdio example/fixture to Swift-SQLite 1.2.0; preserve the
+  other resolved revisions (ADR-0009). Native task-store qualification is required.
+- Add public-product DocC landing pages and toolchain-native documentation builds;
+  retire temporary #53 diagnostics while retaining the regression tests and
+  historical qualification snapshot.
+
 - New `MCPClient` product: client for 2026-07-28 with MRTR, listen streams, schema
   validation and `x-mcp-header` mirroring (ADR-0005, Docs/CLIENT.md). `MCPServerTesting`
   gains `LoopbackTransport`; `MCPClientStdio` launches stdio servers with swift-subprocess.
