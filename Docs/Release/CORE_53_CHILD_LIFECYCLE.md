@@ -21,3 +21,7 @@ Cases: late stderr after stdout closes; nonzero exit; signal exit; restart after
 The original 26-test A1.2 matrix remains separately comparable. A1.3 and A1.4 are independent PRs based on the same main baseline. After both are integrated and dependency provenance verified, rerun the combined instrumented matrix: all tests green, normal CLEAN child exits zero with complete stderr receipts; distinguish intentionally failing oversize/cancellation cases. Do not expect success for intentionally failed children. Full native macOS/Linux and HTTP interop remain required.
 
 Do not merge RED-only or unqualified changes. No dependency update, signal handler, new retry, validation skip, timeout increase, or global suite serialization.
+
+## Candidate correction (not yet natively qualified)
+
+See ADR-0008. All three stream tasks are joined; stdout EOF ends exchanges but does not cancel stderr. Reaped nonzero/signal status is a typed run-owner error, caller cancellation remains CancellationError, and primary I/O failures are propagated. GREEN tests assert exact status values and reject a second run while the previous child is still draining stderr. Neither RED nor GREEN native execution has been observed for the new isolated tests. Do not interpret static predictions as a test receipt.

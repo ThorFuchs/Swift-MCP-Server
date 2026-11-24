@@ -49,15 +49,15 @@ private final class CapturedStderr: Sendable {
 
     @Test func nonzeroExitMustNotReturnSuccess() async {
         let transport = shell("exit 23")
-        await #expect(throws: StdioClientTransportError.self) {
+        await #expect(throws: StdioClientTransportError.unsuccessfulTermination(.exited(23))) {
             try await transport.run()
         }
     }
 
     @Test func signaledChildMustNotReturnSuccess() async {
         // Only the controlled test child signals itself.
-        let transport = shell("kill -KILL $$")
-        await #expect(throws: StdioClientTransportError.self) {
+        let transport = shell("kill -KILL $")
+        await #expect(throws: StdioClientTransportError.unsuccessfulTermination(.signaled(9))) {
             try await transport.run()
         }
     }
@@ -65,7 +65,7 @@ private final class CapturedStderr: Sendable {
     @Test func abnormalExitDoesNotLeaveTransportRunning() async {
         let transport = shell("exit 23")
         for _ in 0..<2 {
-            await #expect(throws: StdioClientTransportError.self) {
+            await #expect(throws: StdioClientTransportError.unsuccessfulTermination(.exited(23))) {
                 try await transport.run()
             }
             await #expect(throws: StdioClientTransportError.notRunning) {
@@ -154,6 +154,10 @@ private final class CapturedStderr: Sendable {
                 try await transport.exchange(request) { _ in
                     Issue.record("child sent an unexpected response")
                 }
+            }
+            // The previous run still owns a live child and stderr reader.
+            await #expect(throws: StdioClientTransportError.alreadyRunning) {
+                try await transport.run()
             }
             try Data().write(to: acknowledgement, options: .atomic)
             try await group.waitForAll()

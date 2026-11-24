@@ -31,7 +31,13 @@ Transports:
   (closes the server's input) or cancels `run()` (SIGTERM, then SIGKILL after
   `terminationGrace`). Responses are routed by `id`, progress by `progressToken`, listen
   events by `subscriptionId`; log messages cannot be correlated on stdio and are dropped.
-  Cancelling a call sends `notifications/cancelled`.
+  Cancelling a call sends `notifications/cancelled`. At stdout EOF, pending exchanges
+  fail with `StdioClientTransportError.serverExited`, while the run owner joins stderr
+  and stdin before returning. A nonzero exit or signal throws
+  `StdioClientTransportError.unsuccessfulTermination` with the subprocess termination
+  status; cancellation of the run is `CancellationError`. A primary I/O/framing
+  error is preserved rather than replaced by a later cleanup status. See
+  [ADR-0008](ADR/0008-client-stdio-child-lifetime.md).
 - `LoopbackTransport` (`MCPServerTesting`): in-process against a `Server`.
 
 ## Behavior
