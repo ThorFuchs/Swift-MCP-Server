@@ -57,11 +57,10 @@ actor ClientFrozenWirePlanCache {
         self.limits = limits
     }
 
-    func plan(for definition: FrozenWireDefinition, trace: (@Sendable (String) -> Void)? = nil) throws -> WireDefinitionPlan {
+    func plan(for definition: FrozenWireDefinition) throws -> WireDefinitionPlan {
         try Task.checkCancellation()
         if let cached = plans[definition] {
             if hits < UInt64.max { hits += 1 }
-            trace?("event=plan.hit definition=\(definition)")
             return cached
         }
 
@@ -69,14 +68,10 @@ actor ClientFrozenWirePlanCache {
         if let cached = document {
             source = cached
         } else {
-            trace?("event=schema.read.begin")
             let bytes = try FrozenWireSchema.read(maximumBytes: FrozenWireSchema.byteCount)
-            trace?("event=schema.read.end")
-            trace?("event=schema.parse.begin")
             let report = try FrozenWireSchema.parse(bytes, limits: limits)
             source = report.result
             if parses < UInt64.max { parses += 1 }
-            trace?("event=schema.parse.end")
 
             // As in server-side preparation, retain against the upstream peak
             // logical-byte report, not an invented heap/RSS measurement.
@@ -84,31 +79,23 @@ actor ClientFrozenWirePlanCache {
             if weight <= maximumRetainedBytes - retainedBytes {
                 document = source
                 retainedBytes += weight
-            } else {
-                trace?("event=cache.document.notRetained")
             }
         }
 
         try Task.checkCancellation()
-        trace?("event=schema.root.begin definition=\(definition)")
         let root = try source.root(at: definition, limits: limits).result
-        trace?("event=schema.root.end definition=\(definition)")
         try Task.checkCancellation()
-        trace?("event=schema.compile.begin definition=\(definition)")
         let report = try WireDefinitionPlan.compile(root, limits: limits)
         if compilations < UInt64.max { compilations += 1 }
-        trace?("event=schema.compile.end definition=\(definition)")
 
         let weight = report.statistics.peakLogicalRetainedBytes
         if plans.count < maximumDefinitions, weight <= maximumRetainedBytes - retainedBytes {
             plans[definition] = report.result
             retainedBytes += weight
-        } else {
-            // Bounded retention is not a validation budget. When full, return
-            // the freshly compiled plan without retaining it or evicting warm
-            // entries. The caller still evaluates the actual response.
-            trace?("event=cache.plan.notRetained definition=\(definition)")
         }
+        // Bounded retention is not a validation budget. When full, return
+        // the freshly compiled plan without retaining it or evicting warm
+        // entries. The caller still evaluates the actual response.
         // A completed immutable artifact is safe to publish even when its
         // original caller was cancelled; that caller must not return success.
         try Task.checkCancellation()

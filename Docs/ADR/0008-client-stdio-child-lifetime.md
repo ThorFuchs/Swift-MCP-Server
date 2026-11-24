@@ -18,3 +18,7 @@ After the shared frozen wire cache change, all 8 Studio diagnostic arms passed, 
 ## Acceptance
 
 Run the isolated public-API lifecycle RED tests on the original transport, then the candidate with exact status assertions. Prove that late stderr arrives, a pending exchange ends before the child finishes stderr, restart is possible after reaping, a simultaneous run is refused, nonzero/signal exit is not success, and cancellation remains cancellation. Full combined Studio, Linux and HTTP qualification is required after A1.3 and A1.4 integrate. See CORE_53_CHILD_LIFECYCLE.md.
+
+## Measured implementation receipt
+
+The combined A1.5 Studio receipt is recorded in [integrated qualification](../Release/CORE_53_INTEGRATED_QUALIFICATION.md). Both new invariant suites and all eight original matrix arms passed; existing deadlines remain. A1.6 removes temporary probes and requires independent qualification of the final clean source and pins. This ADR remains subject to merge review.

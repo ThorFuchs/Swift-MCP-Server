@@ -18,3 +18,7 @@ The A1.2 16-core Studio traces establish that discovery replies arrive before cl
 ## Evidence and consequences
 
 Isolated cache tests check concurrency, count/byte bounds, cancellation, preparation errors and application-schema separation. The A1.2 before/after matrix (unchanged 26-client-test filter) and trace checker must show retained cold-start reuse and green tests on Studio without deadline changes. The new cache tests live in a separately named test target so the original 26-test experimental population stays comparable. Full native CI and HTTP interoperability are still required. A1.4 subprocess exit ownership is independent.
+
+## Measured implementation receipt
+
+The combined A1.5 Studio receipt is recorded in [integrated qualification](../Release/CORE_53_INTEGRATED_QUALIFICATION.md). Both new invariant suites and all eight original matrix arms passed; existing deadlines remain. A1.6 removes temporary probes and requires independent qualification of the final clean source and pins. This ADR remains subject to merge review.

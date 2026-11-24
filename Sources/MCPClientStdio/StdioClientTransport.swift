@@ -1,8 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
 import Foundation
-#if CORE53_DIAGNOSTICS
-import Dispatch
-#endif
 import JSON
 import MCPClient
 import MCPProtocol
@@ -77,12 +74,6 @@ public final class StdioClientTransport: ClientTransport, Sendable {
 
     public init(configuration: Configuration) { self.configuration = configuration }
 
-    #if CORE53_DIAGNOSTICS
-    private func core53ProcessTrace(_ event: String) {
-        let line = "[core53-process] pid=\(ProcessInfo.processInfo.processIdentifier) tick_ns=\(DispatchTime.now().uptimeNanoseconds) transport=\(ObjectIdentifier(self)) \(event)\n"
-        FileHandle.standardError.write(Data(line.utf8))
-    }
-    #endif
 
     // MARK: Lifetime
 
@@ -108,9 +99,6 @@ public final class StdioClientTransport: ClientTransport, Sendable {
         let limit = configuration.maximumMessageBytes, errors = configuration.standardError
         do {
             let result = try await Subprocess.run(setup, input: .inputWriter, output: .sequence, error: .sequence) { execution in
-                #if CORE53_DIAGNOSTICS
-                self.core53ProcessTrace("event=child.launched child_pid=\(execution.processIdentifier.value)")
-                #endif
                 try await withThrowingTaskGroup(of: Void.self) { group in
                     group.addTask {
                         for await line in lines {
@@ -133,9 +121,6 @@ public final class StdioClientTransport: ClientTransport, Sendable {
                                 try await self.route(Data(line))
                             }
                         }
-                        #if CORE53_DIAGNOSTICS
-                        self.core53ProcessTrace("event=stdout.eof child_pid=\(execution.processIdentifier.value)")
-                        #endif
                         // No further response is possible. End exchanges and
                         // finish stdin, but keep the run lifetime and stderr
                         // reader alive until the child has finished its cleanup.
@@ -149,9 +134,6 @@ public final class StdioClientTransport: ClientTransport, Sendable {
                     while try await group.next() != nil {}
                 }
             }
-            #if CORE53_DIAGNOSTICS
-            core53ProcessTrace("event=child.terminated child_pid=\(result.processIdentifier.value) status=\(String(reflecting: result.terminationStatus))")
-            #endif
             try Task.checkCancellation()
             guard result.terminationStatus.isSuccess else {
                 throw StdioClientTransportError.unsuccessfulTermination(result.terminationStatus)

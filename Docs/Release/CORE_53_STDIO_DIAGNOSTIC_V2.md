@@ -1,5 +1,7 @@
 # Core #53 — A1.2: wire validation and fixture exit evidence
 
+> Historical investigation. The temporary probes and executable diagnostic scripts are preserved on the immutable [A1.5 snapshot](https://github.com/ThorFuchs/Swift-MCP-Server/tree/94b80a5a2a437af8b28d38b4312f30e822606706), not in the cleaned release path. See [integrated qualification](CORE_53_INTEGRATED_QUALIFICATION.md).
+
 Diagnostic-only follow-up to PR #54, parent d854b7ebd3c4d5e9ce05f0603b4aed991794a4f1. Do not merge these probes into a release branch.
 
 ## A1.1 evidence

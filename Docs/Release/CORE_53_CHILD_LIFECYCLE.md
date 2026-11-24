@@ -1,5 +1,7 @@
 # Core #53 — A1.4 child process and stream ownership
 
+> Historical investigation. The temporary probes and executable diagnostic scripts are preserved on the immutable [A1.5 snapshot](https://github.com/ThorFuchs/Swift-MCP-Server/tree/94b80a5a2a437af8b28d38b4312f30e822606706), not in the cleaned release path. See [integrated qualification](CORE_53_INTEGRATED_QUALIFICATION.md).
+
 ## Observed evidence before this slice (A1.3)
 
 On 2026-11-24 both original Studio archives were re-read. See [PR #58](https://github.com/ThorFuchs/Swift-MCP-Server/pull/58) for the exact SHA-256 receipts, CI job and provenance. On the 16-core Studio, the shared frozen plan cache removed the original read-idle failures in both parallel-all repetitions (8/8 matrix arms, 120/120 tests). Full parallel runs: parses 28 -> 1; successful compiles 49 -> 15; mean suite duration 128.808 -> 64.078 seconds. Baseline failed; the after checkout had two modified fixture/example lockfiles. These are workload-specific measurements, not a universal benchmark.

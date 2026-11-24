@@ -1,5 +1,7 @@
 # Core #53 — A1.3 frozen client wire plan qualification
 
+> Historical investigation. The temporary probes and executable diagnostic scripts are preserved on the immutable [A1.5 snapshot](https://github.com/ThorFuchs/Swift-MCP-Server/tree/94b80a5a2a437af8b28d38b4312f30e822606706), not in the cleaned release path. See [integrated qualification](CORE_53_INTEGRATED_QUALIFICATION.md).
+
 ## RED evidence (observed before implementation)
 
 A1.2 exact diagnostic SHA `f92ef607c699396c3fb954c8b627b4e486c3c912`, 16-core Studio, macOS 27.3, Swift 6.4.2: eight complete arms, both parallel-all arms fail in the two known stdio cases; six controls pass. All four affected child sidecars report `STOP readDeadline active=0 requests=0 buffered=0 events=0`. Each parallel-all log contains 28 completed schema parses, 50 compile attempts, 49 completed compilations of 15 distinct definitions, and 8 completed DiscoverResult compilations. Each serial-all log still contains 28 completed parses and 54 completed compilations. Repeated preparation is measured, not inferred from a timeout.
