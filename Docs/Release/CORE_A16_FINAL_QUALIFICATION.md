@@ -40,3 +40,14 @@ CI job. No CI artifact quota bypass or test weakening.
 After a successful review and native qualification of this consolidated candidate,
 merge only this integration PR, not the component PRs independently. Reconcile
 the superseded PRs and keep their immutable evidence and history.
+
+
+## A1.6 first native CI receipt and A1.6a gate correction
+
+[CI run 45369333372](https://github.com/ThorFuchs/Swift-MCP-Server/actions/runs/45369333372) on exact commit `3a0ebaa01843544d2e18917931b34279a3db7fec`, 2026-11-24:
+
+- Linux ARM64, Swift 6.4.2: 325/325 test functions passed. The job failed afterward at the Git-based lockfile check (exit 129, "Not a git repository"). No lockfile mutation was established by this error.
+- macOS ARM64: 324/325 test functions passed; the lockfile gate passed. The single issue was in the existing `borrowedFlagsUnchangedOwnedDescriptorsClosedAndSingleUse` test at TransportOwnershipTests.swift:117. DocC conversion was skipped after that test failure.
+- Both jobs passed 6/6 shared cache, 6/6 child lifecycle, 26/26 client and 5/5 SQLite task-store tests (including conformance and reopen). All three workspace builds selected SQLite 1.2.0. No Swift compiler warnings appeared in either log. Linux emitted the Git warning above.
+- A1.6a replaces the Git-dependent final command on both jobs with an exact SHA-256 before/after receipt for all three manifests and three lockfiles. Capture immediately after checkout, outside the source tree; compare even after a test/DocC failure when capture succeeded. Missing input, receipt, hash utility or any byte change fails. Strict SwiftPM resolution and macOS static pin consistency checks remain enabled. No broad Git safe-directory exception.
+- Authoring-host shell control, in a temporary non-Git directory: script syntax valid; unchanged snapshot passes; edited lockfile, edited manifest, deleted lockfile and missing receipt each fail; restored inputs pass. Native CI execution of the new gate is still required.

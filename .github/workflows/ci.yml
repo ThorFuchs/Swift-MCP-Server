@@ -29,6 +29,9 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           persist-credentials: false
+      - name: Capture Core and stdio dependency bytes
+        id: core_pin_snapshot
+        run: bash "$GITHUB_WORKSPACE/Scripts/check-core-lockfile-drift.sh" snapshot "$RUNNER_TEMP/core-dependency-sha256.txt"
       - run: swift --version
       - name: Verify unified lockfile pins and manifest hashes
         run: python3 Scripts/check-core-dependency-pins.py
@@ -46,9 +49,9 @@ jobs:
         run: bash Scripts/build-docs.sh
       - name: Inventory public symbol documentation
         run: python3 Scripts/audit-docs.py
-      - name: Verify no tracked Core and stdio lockfile drift
-        if: always()
-        run: git diff --exit-code -- Package.resolved Examples/StdioServer/Package.resolved Tools/StdioFixture/Package.resolved
+      - name: Verify no Core and stdio dependency byte drift
+        if: always() && steps.core_pin_snapshot.outcome == 'success'
+        run: bash "$GITHUB_WORKSPACE/Scripts/check-core-lockfile-drift.sh" verify "$RUNNER_TEMP/core-dependency-sha256.txt"
       # Research Explorer is CI-tested independently in ThorFuchs/Swift-MCP-Examples.
       # Keep Core CI scoped to the SDK and its own stdio fixtures.
 
@@ -67,6 +70,9 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           persist-credentials: false
+      - name: Capture Core and stdio dependency bytes
+        id: core_pin_snapshot
+        run: bash "$GITHUB_WORKSPACE/Scripts/check-core-lockfile-drift.sh" snapshot "$RUNNER_TEMP/core-dependency-sha256.txt"
       - name: Record Linux architecture and Swift version
         run: |
           uname -sm
@@ -81,6 +87,6 @@ jobs:
           MCP_STRICT_RESOLUTION: "1"
           MCP_FIXTURE_CONFIGURATION: release
         run: Scripts/test.sh -c release
-      - name: Verify no tracked Core and stdio lockfile drift
-        if: always()
-        run: git diff --exit-code -- Package.resolved Examples/StdioServer/Package.resolved Tools/StdioFixture/Package.resolved
+      - name: Verify no Core and stdio dependency byte drift
+        if: always() && steps.core_pin_snapshot.outcome == 'success'
+        run: bash "$GITHUB_WORKSPACE/Scripts/check-core-lockfile-drift.sh" verify "$RUNNER_TEMP/core-dependency-sha256.txt"
