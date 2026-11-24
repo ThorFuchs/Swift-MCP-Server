@@ -56,8 +56,11 @@ public final class SQLiteTaskStore: TaskStore {
 
     /// Opens (and if needed creates and migrates) the task database described by `configuration`.
     ///
-    /// - Parameter maximumPayloadBytes: The byte limit for one stored JSON payload. Writes
-    ///   above it throw `TaskStoreError.payloadTooLarge`. Default 4 MiB.
+    /// - Parameters:
+    ///   - configuration: SQLite database configuration, including the path and resource limits.
+    ///   - maximumPayloadBytes: The byte limit for one stored JSON payload. Writes
+    ///     above it throw `TaskStoreError.payloadTooLarge`. Default 4 MiB.
+    /// - Returns: The opened, migrated task store.
     public static func open(_ configuration: SQLiteConfiguration, maximumPayloadBytes: Int = 4 << 20) async throws -> SQLiteTaskStore {
         guard maximumPayloadBytes > 0, maximumPayloadBytes * 2 + 65536 <= configuration.limits.hardMaxResultBytes else {
             throw SQLiteError.invalidConfiguration("maximumPayloadBytes must be positive and fit twice, plus 64 KiB, into limits.hardMaxResultBytes")
@@ -76,6 +79,7 @@ public final class SQLiteTaskStore: TaskStore {
 
     // MARK: TaskStore
 
+    /// Inserts a new task and commits before returning.
     public func create(_ record: TaskRecord) async throws {
         let row = try Row(record, limit: maximumPayloadBytes, rowBytes: rowBytes)
         let inserted = try await commit { (transaction) throws(SQLiteError) -> Bool in
@@ -91,6 +95,7 @@ public final class SQLiteTaskStore: TaskStore {
         guard inserted else { throw TaskStoreError.duplicate }
     }
 
+    /// Loads an unexpired task belonging to the supplied owner, or nil.
     public func load(id: String, owner: TaskOwner, now: Date) async throws -> TaskRecord? {
         let bytes = rowBytes
         let found = try await translate { [database] () async throws(SQLiteError) -> SQLiteRow? in
@@ -102,6 +107,7 @@ public final class SQLiteTaskStore: TaskStore {
         return try found.map { try Self.record(from: $0, limit: maximumPayloadBytes) }
     }
 
+    /// Attempts a version-checked update and returns the store result.
     public func update(_ record: TaskRecord, expectedVersion: Int64, now: Date) async throws -> TaskUpdateResult {
         let row = try Row(record, limit: maximumPayloadBytes, rowBytes: rowBytes)
         let owner = record.owner
@@ -121,6 +127,7 @@ public final class SQLiteTaskStore: TaskStore {
         }
     }
 
+    /// Counts unexpired tasks, optionally restricted to one owner.
     public func count(owner: TaskOwner?, now: Date) async throws -> Int {
         let value = try await translate { [database] () async throws(SQLiteError) -> SQLiteValue? in
             try await database.read { (transaction) throws(SQLiteError) in
@@ -136,6 +143,7 @@ public final class SQLiteTaskStore: TaskStore {
         return Int(count)
     }
 
+    /// Expires records in a bounded batch and returns their identifiers.
     public func expire(now: Date, limit: Int) async throws -> [String] {
         guard limit > 0 else { return [] }
         let batch = min(limit, SQLitePredicate.maxListCount)
@@ -152,6 +160,7 @@ public final class SQLiteTaskStore: TaskStore {
         }
     }
 
+    /// Enumerates a bounded page of unfinished, unexpired records for restart handling.
     public func unfinished(after cursor: String?, limit: Int, now: Date) async throws -> [TaskRecord] {
         guard limit > 0 else { return [] }
         let bytes = rowBytes
@@ -202,7 +211,7 @@ public final class SQLiteTaskStore: TaskStore {
                 .integer(record.cancellationRequested ? 1 : 0),
             ]
             let fixed = [record.id, record.owner.issuer, record.owner.subject, record.owner.resource].reduce(0) { $0 + $1.utf8.count }
-            guard values.reduce(fixed + 64) { $0 + $1.byteCount } <= rowBytes else { throw TaskStoreError.payloadTooLarge }
+            guard values.reduce(fixed + 64, { $0 + $1.byteCount }) <= rowBytes else { throw TaskStoreError.payloadTooLarge }
         }
     }
 

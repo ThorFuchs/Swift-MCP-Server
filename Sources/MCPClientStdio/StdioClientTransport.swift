@@ -1,8 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
 import Foundation
-#if CORE53_DIAGNOSTICS
-import Dispatch
-#endif
 import JSON
 import MCPClient
 import MCPProtocol
@@ -14,6 +11,7 @@ import System
 import SystemPackage
 #endif
 
+/// Failures of the exchange channel or its owning child-process lifetime.
 public enum StdioClientTransportError: Error, Sendable, Equatable {
     /// `exchange` was called while `run()` is not active.
     case notRunning
@@ -25,6 +23,10 @@ public enum StdioClientTransportError: Error, Sendable, Equatable {
     case serverExited
     /// A line longer than `maximumMessageBytes`.
     case messageTooLarge
+    /// The child was reaped, but did not exit successfully. The exact exit
+    /// code or signal is preserved. Cancellation and primary I/O errors take
+    /// precedence; outstanding exchanges still fail with `serverExited`.
+    case unsuccessfulTermination(TerminationStatus)
 }
 
 /// The stdio transport for MCP 2026-07-28: launches the server as a child process and
@@ -38,16 +40,25 @@ public enum StdioClientTransportError: Error, Sendable, Equatable {
 /// cannot be correlated on stdio and are dropped. Cancelling a call sends
 /// `notifications/cancelled` for its ID.
 public final class StdioClientTransport: ClientTransport, Sendable {
+    /// Host-selected child process, exchange bounds and diagnostic sink.
     public struct Configuration: Sendable {
+        /// Child executable selected by the host.
         public var executable: Executable
+        /// Arguments passed directly to the executable.
         public var arguments: [String]
+        /// Overrides applied to the inherited process environment. Do not log secrets.
         public var environment: [String: String]
+        /// Optional working directory for the child.
         public var workingDirectory: String?
+        /// Maximum concurrent admitted exchanges; the initializer clamps this to at least one.
         public var maximumPendingRequests: Int
+        /// Maximum bytes accepted in a framed input line.
         public var maximumMessageBytes: Int
+        /// Grace interval before forced child termination during cancellation; not an idle deadline.
         public var terminationGrace: Duration
         /// Receives the server's standard error, line by line (ignored when nil).
         public var standardError: (@Sendable (String) -> Void)?
+        /// Creates a child configuration; the host chooses the executable and owns its trust boundary.
         public init(executable: Executable, arguments: [String] = [], environment: [String: String] = [:], workingDirectory: String? = nil,
                     maximumPendingRequests: Int = 64, maximumMessageBytes: Int = 16 * 1024 * 1024, terminationGrace: Duration = .seconds(2),
                     standardError: (@Sendable (String) -> Void)? = nil) {
@@ -68,23 +79,22 @@ public final class StdioClientTransport: ClientTransport, Sendable {
         var running = false
     }
 
+    /// Configuration used for each caller-owned run.
     public let configuration: Configuration
     private let state = Mutex(State())
 
+    /// Constructs the transport without launching a process.
     public init(configuration: Configuration) { self.configuration = configuration }
 
-    #if CORE53_DIAGNOSTICS
-    private func core53ProcessTrace(_ event: String) {
-        let line = "[core53-process] pid=\(ProcessInfo.processInfo.processIdentifier) tick_ns=\(DispatchTime.now().uptimeNanoseconds) transport=\(ObjectIdentifier(self)) \(event)\n"
-        FileHandle.standardError.write(Data(line.utf8))
-    }
-    #endif
 
     // MARK: Lifetime
 
     /// Launches the server and serves exchanges until it exits, `shutdown()` closes its
-    /// input, or the calling task is cancelled. In-flight requests then fail with
-    /// `serverExited`.
+    /// input, or the calling task is cancelled. Outstanding requests fail with
+    /// `serverExited` when stdout ends. The run owner joins the input writer and
+    /// stderr reader and observes the reaped child's termination status. A
+    /// nonzero or signal exit throws `unsuccessfulTermination`; caller
+    /// cancellation is reported as `CancellationError`.
     public func run() async throws {
         // Outgoing lines are bounded by the pending-request limit plus one cancellation each.
         let (lines, outgoing) = AsyncStream.makeStream(of: [UInt8].self)
@@ -99,41 +109,53 @@ public final class StdioClientTransport: ClientTransport, Sendable {
         let setup = Subprocess.Configuration(executable: configuration.executable, arguments: Arguments(configuration.arguments),
             environment: environment, workingDirectory: configuration.workingDirectory.map { FilePath($0) }, platformOptions: options)
         let limit = configuration.maximumMessageBytes, errors = configuration.standardError
-        let result = try await Subprocess.run(setup, input: .inputWriter, output: .sequence, error: .sequence) { execution in
-            #if CORE53_DIAGNOSTICS
-            self.core53ProcessTrace("event=child.launched child_pid=\(execution.processIdentifier.value)")
-            #endif
-            try await withThrowingTaskGroup(of: Void.self) { group in
-                group.addTask {
-                    for await line in lines { _ = try await execution.standardInputWriter.write(line) }
-                    try await execution.standardInputWriter.finish()
-                }
-                group.addTask {
-                    var reader = LineReader(limit: limit)
-                    for try await chunk in execution.standardError {
-                        for line in try chunk.withUnsafeBytes({ try reader.feed(Array($0)) }) { errors?(String(decoding: line, as: UTF8.self)) }
+        do {
+            let result = try await Subprocess.run(setup, input: .inputWriter, output: .sequence, error: .sequence) { execution in
+                try await withThrowingTaskGroup(of: Void.self) { group in
+                    group.addTask {
+                        for await line in lines {
+                            _ = try await execution.standardInputWriter.write(line)
+                        }
+                        try await execution.standardInputWriter.finish()
                     }
-                }
-                var reader = LineReader(limit: limit)
-                for try await chunk in execution.standardOutput {
-                    for line in try chunk.withUnsafeBytes({ try reader.feed(Array($0)) }) where !line.isEmpty {
-                        try await self.route(Data(line))
+                    group.addTask {
+                        var reader = LineReader(limit: limit)
+                        for try await chunk in execution.standardError {
+                            for line in try chunk.withUnsafeBytes({ try reader.feed(Array($0)) }) {
+                                errors?(String(decoding: line, as: UTF8.self))
+                            }
+                        }
                     }
+                    group.addTask {
+                        var reader = LineReader(limit: limit)
+                        for try await chunk in execution.standardOutput {
+                            for line in try chunk.withUnsafeBytes({ try reader.feed(Array($0)) }) where !line.isEmpty {
+                                try await self.route(Data(line))
+                            }
+                        }
+                        // No further response is possible. End exchanges and
+                        // finish stdin, but keep the run lifetime and stderr
+                        // reader alive until the child has finished its cleanup.
+                        self.finishAll(resetLifetime: false)
+                    }
+
+                    // Observe every task result. Normal stdout EOF does not
+                    // cancel stderr. On a real failure, structured task-group
+                    // teardown cancels siblings and swift-subprocess owns the
+                    // process termination and descriptor cleanup.
+                    while try await group.next() != nil {}
                 }
-                #if CORE53_DIAGNOSTICS
-                self.core53ProcessTrace("event=stdout.eof child_pid=\(execution.processIdentifier.value)")
-                #endif
-                // The server closed its output: stop writing and end the run.
-                outgoing.finish()
-                group.cancelAll()
-                _ = try? await group.waitForAll()
             }
+            try Task.checkCancellation()
+            guard result.terminationStatus.isSuccess else {
+                throw StdioClientTransportError.unsuccessfulTermination(result.terminationStatus)
+            }
+        } catch {
+            // Cancellation is the caller's decision, not an unexpected child
+            // signal/exit. Otherwise preserve the original operation failure.
+            try Task.checkCancellation()
+            throw error
         }
-        #if CORE53_DIAGNOSTICS
-        core53ProcessTrace("event=child.terminated child_pid=\(result.processIdentifier.value) status=\(String(reflecting: result.terminationStatus))")
-        #else
-        _ = result.terminationStatus
-        #endif
     }
 
     /// Closes the server's standard input, the graceful shutdown signal; `run()` returns
@@ -142,6 +164,7 @@ public final class StdioClientTransport: ClientTransport, Sendable {
 
     // MARK: Exchanges
 
+    /// Sends a request on the active child; receiver suspension provides backpressure. Pending requests fail at stdout EOF.
     public func exchange(_ request: OutgoingRequest, receive: @escaping @Sendable (Data) async throws -> Void) async throws {
         let key = Self.key(request.id.value)
         let token = (try? WireCodec.parse(Array(request.body), limits: .balanced).result)?
@@ -192,9 +215,15 @@ public final class StdioClientTransport: ClientTransport, Sendable {
         if terminal, let finished = state.withLock({ $0.routes.removeValue(forKey: key) }) { finished.done.resume() }
     }
 
-    private func finishAll() {
+    private func finishAll(resetLifetime: Bool = true) {
         let routes = state.withLock { state -> [Route] in
-            state.running = false; state.outgoing?.finish(); state.outgoing = nil
+            state.outgoing?.finish()
+            // stdout EOF closes exchanges immediately, but a second run must
+            // not acquire this transport until the first child has been joined.
+            if resetLifetime {
+                state.running = false
+                state.outgoing = nil
+            }
             defer { state.routes = [:] }
             return Array(state.routes.values)
         }

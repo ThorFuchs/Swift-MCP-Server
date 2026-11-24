@@ -58,7 +58,9 @@ public enum ResourceContents: Sendable, Equatable {
         self = .blob(uri: uri, mimeType: mime, data: data)
     }
 
+    /// Resource URI associated with either text or blob content.
     public var uri: String { switch self { case .text(let uri, _, _), .blob(let uri, _, _): uri } }
+    /// Optional media type reported by the server.
     public var mimeType: String? { switch self { case .text(_, let mime, _), .blob(_, let mime, _): mime } }
     /// The bytes: UTF-8 of text, or the decoded blob.
     public var bytes: [UInt8] { switch self { case .text(_, _, let text): Array(text.utf8); case .blob(_, _, let data): Array(data) } }
@@ -66,8 +68,10 @@ public enum ResourceContents: Sendable, Equatable {
 
 // MARK: Prompts, completion, templates
 
+/// Role of a message in a prompt or sampling conversation.
 public enum Role: String, Sendable, Equatable { case user, assistant }
 
+/// One role-tagged prompt message.
 public struct PromptMessage: Sendable, Equatable {
     public let role: Role
     public let content: Content
@@ -111,9 +115,11 @@ public enum CompletionReference: Sendable, Equatable {
 
 /// A `completion/complete` result.
 public struct Completion: Sendable {
+    /// Completion candidates.
     public let values: [String]
     /// The total number of options, which can exceed `values.count`.
     public let total: Int?
+    /// Whether more candidates are available, when reported.
     public let hasMore: Bool?
     public let raw: JSON
     init(_ raw: JSON) {
@@ -125,7 +131,9 @@ public struct Completion: Sendable {
     }
 }
 
+/// A server-advertised URI template and associated metadata.
 public struct ResourceTemplate: Sendable {
+    /// The original URI template, not an expanded URI.
     public let uriTemplate: String
     public let name: String
     public let title: String?
@@ -164,6 +172,7 @@ public struct RejectedTool: Sendable, Equatable {
 /// RFC 5424 severities, as `notifications/message` and `io.modelcontextprotocol/logLevel` use them.
 public enum LoggingLevel: String, Sendable, Equatable, CaseIterable, Comparable {
     case debug, info, notice, warning, error, critical, alert, emergency
+    /// Orders severities from debug to emergency.
     public static func < (lhs: Self, rhs: Self) -> Bool { allCases.firstIndex(of: lhs)! < allCases.firstIndex(of: rhs)! }
 }
 
@@ -171,14 +180,18 @@ public enum LoggingLevel: String, Sendable, Equatable, CaseIterable, Comparable 
 
 /// What `subscriptions/listen` asks for. Every notification type is opt-in.
 public struct SubscriptionFilter: Sendable, Equatable {
+    /// Requests tool catalog change notifications.
     public var toolsListChanged: Bool
+    /// Requests prompt catalog change notifications.
     public var promptsListChanged: Bool
+    /// Requests resource catalog change notifications.
     public var resourcesListChanged: Bool
     /// Resources to receive `notifications/resources/updated` for.
     public var resourceSubscriptions: [String]
     /// Extension members of the filter, for example `taskIds` of the Tasks extension.
     public var extensions: [String: JSON]
 
+    /// Constructs an opt-in notification filter.
     public init(toolsListChanged: Bool = false, promptsListChanged: Bool = false, resourcesListChanged: Bool = false,
                 resourceSubscriptions: [String] = [], extensions: [String: JSON] = [:]) {
         self.toolsListChanged = toolsListChanged; self.promptsListChanged = promptsListChanged
@@ -202,6 +215,7 @@ public struct SubscriptionFilter: Sendable, Equatable {
 
 /// An `elicitation/create` request.
 public struct ElicitationRequest: Sendable {
+    /// The form or URL interaction requested by the server.
     public enum Mode: Sendable {
         /// Ask the user to fill a form; `requestedSchema` is a flat JSON Schema object.
         case form(requestedSchema: JSON)
@@ -209,6 +223,7 @@ public struct ElicitationRequest: Sendable {
         case url(URL, elicitationID: String?)
     }
     public let message: String
+    /// Interaction mode and its associated schema or URL.
     public let mode: Mode
     public let raw: JSON
 
@@ -256,10 +271,15 @@ public struct SamplingMessage: Sendable, Equatable {
 
 /// A `sampling/createMessage` request.
 public struct SamplingRequest: Sendable {
+    /// Conversation messages supplied for the host sampling handler.
     public let messages: [SamplingMessage]
+    /// Optional system guidance requested by the server.
     public let systemPrompt: String?
+    /// Requested token limit; the host remains responsible for model policy.
     public let maxTokens: Int
+    /// Optional requested sampling temperature.
     public let temperature: Double?
+    /// Requested stop sequences.
     public let stopSequences: [String]
     /// Everything else (`modelPreferences`, `tools`, `includeContext`, `metadata`).
     public let raw: JSON
@@ -285,9 +305,12 @@ public struct SamplingResponse: Sendable, Equatable {
     public var role: Role
     /// A content block (or array of blocks) as JSON; `text(_:)` builds a text block.
     public var content: JSON
+    /// Name of the model used by the host.
     public var model: String
+    /// Optional reason the host stopped generating.
     public var stopReason: String?
 
+    /// Creates a host-provided sampling result without starting a model.
     public init(role: Role = .assistant, content: JSON, model: String, stopReason: String? = nil) {
         self.role = role; self.content = content; self.model = model; self.stopReason = stopReason
     }
@@ -311,6 +334,7 @@ public struct SamplingResponse: Sendable, Equatable {
 public struct Root: Sendable, Equatable {
     public var uri: String
     public var name: String?
+    /// Creates a host-declared root with an optional display name.
     public init(uri: String, name: String? = nil) { self.uri = uri; self.name = name }
 }
 

@@ -36,7 +36,7 @@ struct PreparedRoundPlan: Sendable {
             guard try await wire.validate(descriptor.request, as: .InputRequest, budget: budget) else { throw CoreFailure.invalidInput }
             let object = descriptor.request.objectValue!, params = object["params"]?.objectValue
             let response: FrozenWireDefinition?
-    let supplemental: PreparedExtensionInput?, features: Set<ClientFeature>, form: PreparedSchema?
+            let features: Set<ClientFeature>, form: PreparedSchema?
             var samplingTools: [ScalarText: PreparedSchema] = [:]
             switch object["method"]!.stringValue! {
             case "roots/list": response = .ListRootsResult; features = [.roots]; form = nil

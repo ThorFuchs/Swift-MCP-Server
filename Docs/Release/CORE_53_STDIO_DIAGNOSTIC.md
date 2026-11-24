@@ -1,5 +1,7 @@
 # Core #53 — Stdio startup and parallel-suite diagnostic
 
+> Historical investigation. The temporary probes and executable diagnostic scripts are preserved on the immutable [A1.5 snapshot](https://github.com/ThorFuchs/Swift-MCP-Server/tree/94b80a5a2a437af8b28d38b4312f30e822606706), not in the cleaned release path. See [integrated qualification](CORE_53_INTEGRATED_QUALIFICATION.md).
+
 **Scope:** diagnostic evidence only. This PR does not fix the root cause or relax test assertions. Baseline: Core `e74557366c04a671973403f6911cb60fc02a88e3`, macOS 27 / Swift 6.4.2.
 
 ## Established before this PR

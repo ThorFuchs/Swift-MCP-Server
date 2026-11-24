@@ -178,7 +178,12 @@ public struct SkillCatalog: Sendable {
     /// Loads every directory under `root` that contains a `SKILL.md` as a skill, nested ones
     /// included; each skill's files are all regular files below its directory. Hidden files
     /// and directories (`.name`) are skipped; symbolic links are rejected.
-    /// - Parameter prefix: optional organizational prefix, for example `acme/billing`.
+    ///
+    /// - Parameters:
+    ///   - root: The directory containing the skill directories to load.
+    ///   - prefix: Optional organizational prefix, for example `acme/billing`.
+    ///   - configuration: Optional catalog settings; nil selects the catalog defaults.
+    /// - Returns: A validated catalog of the discovered skill directories and their files.
     public static func load(directory root: URL, prefix: String? = nil, configuration: SkillCatalogConfiguration? = nil) throws -> SkillCatalog {
         let base = root.standardizedFileURL.resolvingSymlinksInPath()
         var relativeFiles: [String] = []

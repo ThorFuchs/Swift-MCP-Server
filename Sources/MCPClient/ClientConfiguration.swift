@@ -6,11 +6,15 @@ import MCPProtocol
 /// extension defines. Receives the request's `params` and returns its result object.
 public typealias InputHandler = @Sendable (JSON) async throws -> JSON
 
+/// Controls request metadata, capabilities, host callbacks and validation policy.
 public struct ClientConfiguration: Sendable {
+    /// Host-declared elicitation modes and the handler that answers their requests.
     public struct Elicitation: Sendable {
         /// The modes declared in the `elicitation` capability.
         public var form: Bool, url: Bool
+        /// Host callback invoked for an elicitation request.
         public let handler: @Sendable (ElicitationRequest) async throws -> ElicitationResponse
+        /// Declares supported interaction modes and supplies their callback.
         public init(form: Bool = true, url: Bool = false, handler: @escaping @Sendable (ElicitationRequest) async throws -> ElicitationResponse) {
             self.form = form; self.url = url; self.handler = handler
         }
@@ -39,6 +43,7 @@ public struct ClientConfiguration: Sendable {
     /// `outputSchema` from `tools/list` (default `true`). Elicitation content is always
     /// checked against `requestedSchema`.
     public var validatesStructuredContent: Bool = true
+    /// Creates a configuration; the input-round limit is clamped to at least one.
     public init(info: JSON? = nil, elicitation: Elicitation? = nil,
                 sampling: (@Sendable (SamplingRequest) async throws -> SamplingResponse)? = nil,
                 roots: (@Sendable () async throws -> [Root])? = nil, additionalInputHandlers: [String: InputHandler] = [:],
@@ -61,7 +66,7 @@ public struct ClientConfiguration: Sendable {
         if sampling != nil { members.append(JSONMember("sampling", value: empty)) }
         if roots != nil { members.append(JSONMember("roots", value: empty)) }
         if !extensions.isEmpty {
-            let declared = try extensions.sorted { $0.key < $1.key }.map { JSONMember($0.key, value: $0.value) }
+            let declared = extensions.sorted { $0.key < $1.key }.map { JSONMember($0.key, value: $0.value) }
             members.append(JSONMember("extensions", value: .object(try JSONObject(members: declared))))
         }
         return .object(try JSONObject(members: members))

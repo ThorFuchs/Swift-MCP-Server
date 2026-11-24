@@ -198,7 +198,13 @@ public actor TaskRuntime {
     /// of a multi-round (MRTR) tool: return `.supplemental(result)` from that round. Answers
     /// gathered in earlier rounds can be captured by `work`. Throws
     /// `ExtensionCapabilityRequired` when the request did not negotiate the extension.
-    /// - Parameter outputSchema: the tool's `outputSchema`, if any, to validate the result.
+    ///
+    /// - Parameters:
+    ///   - input: The tool input, preserving absent and present JSON values.
+    ///   - context: The originating request context, including its verified principal and negotiated extensions.
+    ///   - outputSchema: The tool's optional output schema used to validate the result.
+    ///   - work: The task body, executed by the runtime with the task's context and budget.
+    /// - Returns: The task result object identifying the newly admitted task.
     public func start(_ input: JSONPresence<JSON>, context: RequestContext, outputSchema: JSON? = nil,
                       work: @escaping TaskWork) async throws -> JSON {
         guard context.extensions[TaskSchemas.identifier] != nil else { throw ExtensionCapabilityRequired(ScalarText(TaskSchemas.identifier)) }

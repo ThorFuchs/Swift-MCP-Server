@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import JSON
 
+/// Protocol, validation and input-handling failures. Transport errors propagate separately.
 public enum ClientError: Error, Sendable, Equatable {
     /// A JSON-RPC error response. `-32021` carries `data.requiredCapabilities`.
     case server(code: Int, message: String, data: JSON?)

@@ -1,21 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 import Foundation
-#if CORE53_DIAGNOSTICS
-import Dispatch
-#endif
 import JSON
 import JSONSchema
 import MCPJSONSchemaAdapter
 import MCPProtocol
 import Synchronization
 
-#if CORE53_DIAGNOSTICS
-// Diagnostic branch only; no payload logging and no public API change.
-private func core53WireTrace(_ validator: WireValidator, _ event: String) {
-    let line = "[core53-wire] pid=\(ProcessInfo.processInfo.processIdentifier) tick_ns=\(DispatchTime.now().uptimeNanoseconds) validator=\(validator.core53ID) \(event)\n"
-    FileHandle.standardError.write(Data(line.utf8))
-}
-#endif
 
 /// A client for MCP revision 2026-07-28.
 ///
@@ -26,8 +16,10 @@ private func core53WireTrace(_ validator: WireValidator, _ event: String) {
 /// opaque `requestState` (MRTR). Requests run concurrently on the calling tasks; cancelling
 /// a call cancels its exchange. The client keeps no session and owns no tasks.
 public actor Client {
+    /// Frozen protocol revision emitted in every request.
     public static let protocolVersion = "2026-07-28"
 
+    /// Host-supplied capability declarations, handlers and parsing limits.
     public nonisolated let configuration: ClientConfiguration
     private let transport: any ClientTransport
     private let validator = WireValidator()
@@ -39,6 +31,7 @@ public actor Client {
     /// Tools dropped from `tools/list` because of invalid `x-mcp-header` annotations.
     public private(set) var rejectedTools: [RejectedTool] = []
 
+    /// Creates a client over a supplied transport without starting it or discovering the server.
     public init(transport: any ClientTransport, configuration: ClientConfiguration = .init()) {
         self.transport = transport; self.configuration = configuration
     }
@@ -93,9 +86,11 @@ public actor Client {
         return tool
     }
 
+    /// Returns a validated resource page; nil starts a listing.
     public func listResources(cursor: String? = nil) async throws -> Page<Resource> {
         try await page("resources/list", key: "resources", cursor: cursor, definition: .ListResourcesResult, Resource.init)
     }
+    /// Returns a validated resource-template page, preserving original URI templates.
     public func listResourceTemplates(cursor: String? = nil) async throws -> Page<ResourceTemplate> {
         try await page("resources/templates/list", key: "resourceTemplates", cursor: cursor, definition: .ListResourceTemplatesResult, ResourceTemplate.init)
     }
@@ -105,6 +100,7 @@ public actor Client {
         return try (result.objectValue?["contents"]?.arrayValue ?? []).map(ResourceContents.init)
     }
 
+    /// Returns a validated prompt page; pass the opaque next cursor to continue.
     public func listPrompts(cursor: String? = nil) async throws -> Page<Prompt> {
         try await page("prompts/list", key: "prompts", cursor: cursor, definition: .ListPromptsResult, Prompt.init)
     }
@@ -119,7 +115,13 @@ public actor Client {
     }
 
     /// `completion/complete` for an argument of a prompt or resource template.
-    /// - Parameter previousArguments: values of arguments already chosen (`context.arguments`).
+    ///
+    /// - Parameters:
+    ///   - reference: The prompt or resource template being completed.
+    ///   - name: The name of the argument to complete.
+    ///   - value: The current argument value, including a partial value.
+    ///   - previousArguments: Values of arguments already chosen (`context.arguments`).
+    /// - Returns: Validated completion candidates and any reported pagination metadata.
     public func complete(_ reference: CompletionReference, argument name: String, value: String,
                          previousArguments: [String: String] = [:]) async throws -> Completion {
         var params = [JSONMember("ref", value: try reference.json),
@@ -174,17 +176,11 @@ public actor Client {
             let body = try request(id: id, method: method, params: params + continuation, progressToken: token, logs: onLog != nil)
             let final = Mutex<JSON?>(nil)
             let validator = self.validator, limits = configuration.limits
-            #if CORE53_DIAGNOSTICS
-            core53WireTrace(validator, "event=exchange.begin client=\(ObjectIdentifier(self)) method=\(method) id=\(id)")
-            #endif
             try await transport.exchange(OutgoingRequest(id: .integer(JSONNumber(integer: id)), method: method, name: name, body: body, parameterHeaders: parameterHeaders)) { frame in
                 let message = try WireCodec.parse(Array(frame), limits: limits).result
                 guard let object = message.objectValue else { throw ClientError.invalidResponse("message is not an object") }
                 if object["id"] != nil, object["method"] == nil {
                     guard Self.matches(object["id"], id) else { throw ClientError.invalidResponse("response for another request") }
-                    #if CORE53_DIAGNOSTICS
-                    core53WireTrace(validator, "event=response.parsed method=\(method) id=\(id)")
-                    #endif
                     try final.withLock { value in
                         guard value == nil else { throw ClientError.invalidResponse("second response") }
                         value = message
@@ -195,9 +191,6 @@ public actor Client {
                 try await Self.dispatch(notification, params: object["params"], raw: message, token: token, validator: validator,
                                         onProgress: onProgress, onLog: onLog, onEvent: onEvent)
             }
-            #if CORE53_DIAGNOSTICS
-            core53WireTrace(validator, "event=exchange.end method=\(method) id=\(id)")
-            #endif
             guard let response = final.withLock({ $0 })?.objectValue else { throw ClientError.noResponse }
             if let error = response["error"] {
                 let failure = Self.serverError(error)
@@ -227,15 +220,7 @@ public actor Client {
                 }
                 if let state = object["requestState"] { continuation.append(JSONMember("requestState", value: state)) }
             case "complete":
-                #if CORE53_DIAGNOSTICS
-                if let definition {
-                    core53WireTrace(validator, "event=validation.await.begin method=\(method) id=\(id)")
-                    guard try await validator.validate(result, as: definition) else { throw ClientError.invalidResponse("\(method) result") }
-                    core53WireTrace(validator, "event=validation.await.end method=\(method) id=\(id)")
-                }
-                #else
                 if let definition { guard try await validator.validate(result, as: definition) else { throw ClientError.invalidResponse("\(method) result") } }
-                #endif
                 return result
             default:
                 guard acceptsExtensionResults, try await validator.validate(result, as: .Result) else {
@@ -351,21 +336,15 @@ public actor Client {
     }
 }
 
-/// Compiles frozen 2026-07-28 definitions on first use and validates against them.
+/// Validates frozen definitions with shared immutable plans. Only server-supplied
+/// schema plans remain in this validator's client-local cache.
 actor WireValidator {
-    #if CORE53_DIAGNOSTICS
-    nonisolated let core53ID = UUID()
-    #endif
-    private var document: FrozenWireDocument?
-    private var plans: [FrozenWireDefinition: WireDefinitionPlan] = [:]
+    private let frozenPlans: ClientFrozenWirePlanCache
+    static let compileLimits = ClientFrozenWirePlanCache.compileLimits
 
-    static let compileLimits: JSONLimits = {
-        var limits = JSONLimits.balanced
-        for key: JSONResourceMetric in [.workUnits, .compileWorkUnits, .evaluationWorkUnits, .numericWorkUnits, .regexCompileWorkUnits, .aggregateRegexWorkUnits] {
-            limits[key] = 256_000_000
-        }
-        return limits
-    }()
+    init(frozenPlans: ClientFrozenWirePlanCache = .shared) {
+        self.frozenPlans = frozenPlans
+    }
 
     /// Compiled server-supplied schemas (`outputSchema`, `requestedSchema`), bounded.
     private var schemas: [JSON: CompiledJSONSchema] = [:]
@@ -385,49 +364,13 @@ actor WireValidator {
         return try SchemaValidatorAdapter.validate(value, against: plan, limits: Self.compileLimits).result.isValid
     }
 
-    func validate(_ value: JSON, as definition: FrozenWireDefinition) throws -> Bool {
-        #if CORE53_DIAGNOSTICS
-        let compiled = try plan(definition)
-        core53WireTrace(self, "event=evaluate.begin definition=\(definition)")
+    func validate(_ value: JSON, as definition: FrozenWireDefinition) async throws -> Bool {
+        try Task.checkCancellation()
+        let compiled = try await frozenPlans.plan(for: definition)
+        try Task.checkCancellation()
+        // Do not hold the shared cache actor during instance-specific evaluation.
         let valid = try compiled.validate(value, limits: Self.compileLimits).result
-        core53WireTrace(self, "event=evaluate.end definition=\(definition) valid=\(valid)")
+        try Task.checkCancellation()
         return valid
-        #else
-        try plan(definition).validate(value, limits: Self.compileLimits).result
-        #endif
-    }
-
-    private func plan(_ definition: FrozenWireDefinition) throws -> WireDefinitionPlan {
-        #if CORE53_DIAGNOSTICS
-        if let plan = plans[definition] {
-            core53WireTrace(self, "event=plan.hit definition=\(definition)")
-            return plan
-        }
-        let document: FrozenWireDocument
-        if let cached = self.document { document = cached }
-        else {
-            core53WireTrace(self, "event=schema.read.begin")
-            let bytes = try FrozenWireSchema.read(maximumBytes: FrozenWireSchema.byteCount)
-            core53WireTrace(self, "event=schema.read.end")
-            core53WireTrace(self, "event=schema.parse.begin")
-            document = try FrozenWireSchema.parse(bytes, limits: Self.compileLimits).result
-            core53WireTrace(self, "event=schema.parse.end")
-        }
-        self.document = document
-        core53WireTrace(self, "event=schema.root.begin definition=\(definition)")
-        let root = try document.root(at: definition, limits: Self.compileLimits).result
-        core53WireTrace(self, "event=schema.root.end definition=\(definition)")
-        core53WireTrace(self, "event=schema.compile.begin definition=\(definition)")
-        let plan = try WireDefinitionPlan.compile(root, limits: Self.compileLimits).result
-        core53WireTrace(self, "event=schema.compile.end definition=\(definition)")
-        #else
-        if let plan = plans[definition] { return plan }
-        let document = try self.document ?? FrozenWireSchema.parse(FrozenWireSchema.read(maximumBytes: FrozenWireSchema.byteCount), limits: Self.compileLimits).result
-        self.document = document
-        let root = try document.root(at: definition, limits: Self.compileLimits).result
-        let plan = try WireDefinitionPlan.compile(root, limits: Self.compileLimits).result
-        #endif
-        plans[definition] = plan
-        return plan
     }
 }

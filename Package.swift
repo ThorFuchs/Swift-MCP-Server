@@ -33,8 +33,8 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-service-context.git", from: "1.3.0"),
         .package(url: "https://github.com/apple/swift-system.git", from: "1.8.1"),
         .package(url: "https://github.com/swiftlang/swift-subprocess.git", from: "1.0.2"),
-        // Durable task store backend (ADR-0004); used only by MCPTasksSQLite. Pinned to 0.2.x.
-        .package(url: "https://github.com/ThorFuchs/Swift-SQLite.git", from: "1.0.0"),
+        // Durable task store backend (ADR-0004, ADR-0009); SQLiteSwift 1.2.0 minimum.
+        .package(url: "https://github.com/ThorFuchs/Swift-SQLite.git", from: "1.2.0"),
     ],
     targets: [
         .target(name: "MCPProtocol", dependencies: [.product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux])), .product(name: "JSON", package: "swift-json"), .product(name: "JSONSchema", package: "swift-json")], resources: [.copy("Resources")]),
@@ -65,10 +65,14 @@ let package = Package(
         .testTarget(name: "MCPTasksSQLiteTests", dependencies: ["MCPTasksSQLite", "MCPTasks", "MCPTasksTesting", .product(name: "SQLiteSwift", package: "Swift-SQLite"), .product(name: "SQLiteSwiftTesting", package: "Swift-SQLite"), .product(name: "JSON", package: "swift-json")]),
         .testTarget(name: "MCPTasksTests", dependencies: ["MCPTasks", "MCPTasksTesting", "MCPServer", "MCPProtocol", "MCPServerTesting", .product(name: "JSON", package: "swift-json")]),
         .testTarget(name: "MCPClientTests", dependencies: ["MCPClient", "MCPClientStdio", "MCPServerTesting", "MCPServer", "MCPProtocol", .product(name: "JSON", package: "swift-json")]),
+        // Separate target preserves the original MCPClientTests population for the #53 A/B proof.
+        .testTarget(name: "MCPClientWireCacheTests", dependencies: ["MCPClient", "MCPProtocol", .product(name: "JSON", package: "swift-json")]),
         .testTarget(name: "MCPTasksClientTests", dependencies: ["MCPTasksClient", "MCPTasks", "MCPClient", "MCPServer", "MCPServerTesting", "MCPProtocol", .product(name: "JSON", package: "swift-json")]),
         .testTarget(name: "MCPSkillsClientTests", dependencies: [.product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux])), "MCPSkillsClient", "MCPSkills", "MCPClient", "MCPServer", "MCPServerTesting", "MCPProtocol", .product(name: "JSON", package: "swift-json")]),
         .testTarget(name: "MCPSkillsTests", dependencies: [.product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux])), "MCPSkills", "MCPSkillsFormat", "MCPServer", "MCPProtocol", .product(name: "JSON", package: "swift-json")]),
         .testTarget(name: "MCPServerTestingTests", dependencies: ["MCPServerTesting", "MCPServer", "MCPProtocol", .product(name: "JSON", package: "swift-json")], exclude: ["TEST_PLAN.md"]),
+        // Keep lifecycle probes independent of the original 26-client-test diagnostic population.
+        .testTarget(name: "MCPClientStdioLifecycleTests", dependencies: ["MCPClientStdio", "MCPClient", "MCPProtocol", .product(name: "JSON", package: "swift-json"), .product(name: "Subprocess", package: "swift-subprocess")]),
         .testTarget(name: "MCPJSONSchemaAdapterTests", dependencies: ["MCPJSONSchemaAdapter", .product(name: "JSON", package: "swift-json"), .product(name: "JSONSchema", package: "swift-json")], exclude: ["TEST_PLAN.md"]),
     ],
     swiftLanguageModes: [.v6]

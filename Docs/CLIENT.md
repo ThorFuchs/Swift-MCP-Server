@@ -31,7 +31,13 @@ Transports:
   (closes the server's input) or cancels `run()` (SIGTERM, then SIGKILL after
   `terminationGrace`). Responses are routed by `id`, progress by `progressToken`, listen
   events by `subscriptionId`; log messages cannot be correlated on stdio and are dropped.
-  Cancelling a call sends `notifications/cancelled`.
+  Cancelling a call sends `notifications/cancelled`. At stdout EOF, pending exchanges
+  fail with `StdioClientTransportError.serverExited`, while the run owner joins stderr
+  and stdin before returning. A nonzero exit or signal throws
+  `StdioClientTransportError.unsuccessfulTermination` with the subprocess termination
+  status; cancellation of the run is `CancellationError`. A primary I/O/framing
+  error is preserved rather than replaced by a later cleanup status. See
+  [ADR-0008](ADR/0008-client-stdio-child-lifetime.md).
 - `LoopbackTransport` (`MCPServerTesting`): in-process against a `Server`.
 
 ## Behavior
@@ -66,7 +72,10 @@ Transports:
   `Equatable`, and `ClientError.Code` names the codes (for example `.methodNotFound`,
   `.missingRequiredCapabilities`). `requiredExtensions` reads the extensions a `-32021` names.
 - **Concurrency.** `Client` is an actor; calls run concurrently on the caller's tasks and
-  cancelling a call cancels its exchange. No detached tasks, no global state.
+  cancelling a call cancels its exchange. No detached tasks or shared mutable request state.
+  Only hash-verified frozen wire preparation is shared through a bounded, process-local actor
+  (see [ADR-0007](ADR/0007-client-frozen-wire-cache.md)); each response is still evaluated,
+  and server-supplied schema plans remain client-local.
 
 ## Extensions
 

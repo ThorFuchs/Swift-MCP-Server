@@ -4,6 +4,12 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      qualify_release:
+        description: Run optimized tests in addition to the normal suite
+        required: false
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -23,14 +29,39 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           persist-credentials: false
+      - name: Capture Core and stdio dependency bytes
+        id: core_pin_snapshot
+        run: bash "$GITHUB_WORKSPACE/Scripts/check-core-lockfile-drift.sh" snapshot "$RUNNER_TEMP/core-dependency-sha256.txt"
       - run: swift --version
-      - run: Scripts/test.sh
+      - name: Verify unified lockfile pins and manifest hashes
+        run: python3 Scripts/check-core-dependency-pins.py
+      - name: Test locked Core and stdio dependency graph
+        env:
+          MCP_STRICT_RESOLUTION: "1"
+        run: Scripts/test.sh
+      - name: Optimized release qualification
+        if: github.event_name == 'workflow_dispatch' && inputs.qualify_release
+        env:
+          MCP_STRICT_RESOLUTION: "1"
+          MCP_FIXTURE_CONFIGURATION: release
+        run: Scripts/test.sh -c release
+      - name: Build all public DocC archives
+        run: bash Scripts/build-docs.sh
+      - name: Inventory public symbol documentation
+        run: python3 Scripts/audit-docs.py
+      - name: Verify no Core and stdio dependency byte drift
+        if: always() && steps.core_pin_snapshot.outcome == 'success'
+        run: bash "$GITHUB_WORKSPACE/Scripts/check-core-lockfile-drift.sh" verify "$RUNNER_TEMP/core-dependency-sha256.txt"
       # Research Explorer is CI-tested independently in ThorFuchs/Swift-MCP-Examples.
       # Keep Core CI scoped to the SDK and its own stdio fixtures.
 
   linux:
-    # GitHub-hosted runner with the official Swift 6.4.2 Ubuntu 24.04 image.
-    runs-on: ubuntu-24.04
+    # Opt in to the Studio Linux ARM64 runner for trusted same-repository work.
+    # Keep hosted Ubuntu as the default, including fork PRs in this workflow.
+    runs-on: >-
+      ${{ fromJSON(vars.USE_SELF_HOSTED_LINUX == 'true' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+      && '["self-hosted","Linux","ARM64","swift-ci-linux"]' || '"ubuntu-24.04"') }}
     container:
       # swift:6.4.2-noble multi-architecture index, pinned by digest.
       image: swift@sha256:bca121f6eb59fd80340d1296887b2698ed8f3eb9eca7d80c181f8af769dc7ee0
@@ -39,5 +70,23 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           persist-credentials: false
-      - run: swift --version
-      - run: Scripts/test.sh
+      - name: Capture Core and stdio dependency bytes
+        id: core_pin_snapshot
+        run: bash "$GITHUB_WORKSPACE/Scripts/check-core-lockfile-drift.sh" snapshot "$RUNNER_TEMP/core-dependency-sha256.txt"
+      - name: Record Linux architecture and Swift version
+        run: |
+          uname -sm
+          swift --version
+      - name: Test locked Core and stdio dependency graph
+        env:
+          MCP_STRICT_RESOLUTION: "1"
+        run: Scripts/test.sh
+      - name: Optimized release qualification
+        if: github.event_name == 'workflow_dispatch' && inputs.qualify_release
+        env:
+          MCP_STRICT_RESOLUTION: "1"
+          MCP_FIXTURE_CONFIGURATION: release
+        run: Scripts/test.sh -c release
+      - name: Verify no Core and stdio dependency byte drift
+        if: always() && steps.core_pin_snapshot.outcome == 'success'
+        run: bash "$GITHUB_WORKSPACE/Scripts/check-core-lockfile-drift.sh" verify "$RUNNER_TEMP/core-dependency-sha256.txt"

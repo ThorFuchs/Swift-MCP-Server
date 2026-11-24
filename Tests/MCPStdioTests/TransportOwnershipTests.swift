@@ -111,14 +111,85 @@ private func awaitWorker(_ io: FileDescriptorIO) async throws -> UInt {
         #expect(fcntl(outgoing.writeEnd.rawValue,F_GETFL) == outputFlags)
         #expect(getNoSigPipe(outgoing.writeEnd.rawValue) == noSigPipe)
         await #expect(throws:StdioFailure.alreadyRunning) { try await transport.run(server:server,principal:ownershipPrincipal,origin:ScalarText("borrowed")) }
-        let ownedInput = try FileDescriptor.pipe(), ownedOutput = try FileDescriptor.pipe()
-        defer { try? ownedInput.writeEnd.close(); try? ownedOutput.readEnd.close() }
-        let owned = try StdioTransport(input:ownedInput.readEnd,output:ownedOutput.writeEnd,inputOwnership:.owned,outputOwnership:.owned)
-        #expect(fcntl(ownedInput.readEnd.rawValue,F_GETFD) == -1)
-        #expect(fcntl(ownedOutput.writeEnd.rawValue,F_GETFD) == -1)
+        // Keep the original owned ends blocking at construction, but do not
+        // let an unrelated concurrently spawned child inherit either pipe.
+        var originalsTransferred = false
+        let ownedInput = try testPipe(nonBlocking:false)
+        defer {
+            try? ownedInput.writeEnd.close()
+            if !originalsTransferred { try? ownedInput.readEnd.close() }
+        }
+        let ownedOutput = try testPipe(nonBlocking:false)
+        defer {
+            try? ownedOutput.readEnd.close()
+            if !originalsTransferred { try? ownedOutput.writeEnd.close() }
+        }
+        // Only the peers that remain owned by this test are used for the
+        // subsequent nonblocking kernel observations.
+        try FileDescriptorIO.nonblocking(ownedInput.writeEnd.rawValue)
+        try FileDescriptorIO.nonblocking(ownedOutput.readEnd.rawValue)
+        try #require(setNoSigPipe(ownedInput.writeEnd.rawValue) == 0)
+
+        let events = ConstructionObservations()
+        let owned = try StdioTransport(input:ownedInput.readEnd,output:ownedOutput.writeEnd,
+            inputOwnership:.owned,outputOwnership:.owned,policy:nil,lifecycle:events.probe)
+        originalsTransferred = true
+
+        // The production probe records each event only after the corresponding
+        // original close syscall succeeds. A freed descriptor number can be
+        // reused by a parallel suite immediately; F_GETFD on that integer
+        // cannot prove whether the original pipe end was closed.
+        #expect(events.count("transferred.input") == 1)
+        #expect(events.count("transferred.output") == 1)
+        #expect(events.count("transferred.") == 2)
+        #expect(events.count("activated.") == 0 && events.count("closed.") == 0)
+
         owned.shutdown()
         try await owned.run(server:server,principal:ownershipPrincipal,origin:ScalarText("owned"))
-        #expect(owned.statistics.writerBytes == 0)
+        #expect(owned.statistics.phase == .stopped && owned.statistics.writerBytes == 0)
+        #expect(events.count("joined.input") == 1 && events.count("joined.output") == 1)
+        for endpoint in ["input","output"] {
+            for part in ["descriptor","wakeRead","wakeWrite"] {
+                #expect(events.count("closed." + endpoint + "." + part) == 1)
+            }
+        }
+        #expect(events.count("closed.") == 6 && !events.overflow)
+
+        // Independent kernel proof: neither original nor duplicate pipe ends
+        // may remain open after settlement. The retained peers identify the
+        // actual pipes regardless of recycling of the transferred FD numbers.
+        // Use the existing 100 ms observation bound from the worker-close test.
+        let observation = ContinuousClock.now.advanced(by:.milliseconds(100))
+        var inputClosed = false, outputClosed = false
+        var byte: UInt8 = 1
+        while !(inputClosed && outputClosed) && ContinuousClock.now < observation {
+            if !inputClosed {
+                do {
+                    let written = try withUnsafeBytes(of:&byte) {
+                        try ownedInput.writeEnd.write($0,retryOnInterrupt:false)
+                    }
+                    #expect(written == 1)
+                } catch Errno.brokenPipe {
+                    inputClosed = true
+                } catch Errno.interrupted {
+                    // Retry only within the observation bound.
+                }
+            }
+            if !outputClosed {
+                do {
+                    let count = try withUnsafeMutableBytes(of:&byte) {
+                        try ownedOutput.readEnd.read(into:$0,retryOnInterrupt:false)
+                    }
+                    try #require(count == 0, "Unexpected bytes from the dormant transport")
+                    outputClosed = true
+                } catch let error as Errno where error == .wouldBlock || error == .interrupted {
+                    // Neither condition is EOF. Keep observing within the bound.
+                }
+            }
+            if !(inputClosed && outputClosed) { try await Task.sleep(for:.milliseconds(1)) }
+        }
+        #expect(inputClosed, "The original input pipe must report EPIPE after settlement")
+        #expect(outputClosed, "The original output pipe must report EOF after settlement")
         let a = await server.activity
         #expect(a.active == 0 && a.requests == 0 && a.bufferedBytes == 0)
     }
