@@ -51,3 +51,42 @@ the superseded PRs and keep their immutable evidence and history.
 - Both jobs passed 6/6 shared cache, 6/6 child lifecycle, 26/26 client and 5/5 SQLite task-store tests (including conformance and reopen). All three workspace builds selected SQLite 1.2.0. No Swift compiler warnings appeared in either log. Linux emitted the Git warning above.
 - A1.6a replaces the Git-dependent final command on both jobs with an exact SHA-256 before/after receipt for all three manifests and three lockfiles. Capture immediately after checkout, outside the source tree; compare even after a test/DocC failure when capture succeeded. Missing input, receipt, hash utility or any byte change fails. Strict SwiftPM resolution and macOS static pin consistency checks remain enabled. No broad Git safe-directory exception.
 - Authoring-host shell control, in a temporary non-Git directory: script syntax valid; unchanged snapshot passes; edited lockfile, edited manifest, deleted lockfile and missing receipt each fail; restored inputs pass. Native CI execution of the new gate is still required.
+
+
+## A1.6b — descriptor identity and close proof
+
+The first A1.6 CI reported `fcntl(ownedInput.readEnd.rawValue,F_GETFD) == -1`
+as false (returned 1). It does not establish whether that integer still
+identifies the original pipe. The constructor first prepares duplicates, then
+closes the transferred originals exactly once and emits the existing
+`transferred.input` / `transferred.output` probe events only after successful
+close; ambiguous close errors are retained through run settlement.
+
+An isolated Linux authoring-host control created a pipe, duplicated its read
+end, closed the original descriptor, and opened an unrelated file with that
+same numeric descriptor. F_GETFD returned success even though the original
+had closed. After closing the retained duplicate, the original pipe's peer
+reported EPIPE. This demonstrates the invalid inference in the former test;
+it is not a direct replay or proof of the historical macOS event.
+
+Keep the original borrowed-flag checks, single-use assertion, shutdown/run
+and activity assertions. Replace the two stale-integer assertions with:
+
+1. Exactly one successful original transfer-close receipt for each endpoint
+   at construction, with no worker activation or prepared-endpoint close yet.
+2. Both endpoint joins and exactly one close receipt for each of the six
+   prepared descriptors/wake-pipe ends after settlement.
+3. Independent EPIPE and EOF observations on the test-owned original pipe
+   peers after joining, under the existing 100 ms kernel observation bound.
+   No unexpected payload or other I/O error is accepted. Use the existing
+   test-only SIGPIPE suppression helper, never add an SDK signal handler.
+4. Close originals in test cleanup only if transfer did not succeed. Never
+   inspect or close a stale transferred descriptor number.
+
+This changes only the ownership test and its documentation, not production
+StdioTransport, FileDescriptorIO, policy, deadlines, test count or suite
+parallelism. Test-only CLOEXEC pipes reduce unrelated child inheritance.
+The strengthened test needs native parallel-suite qualification on both
+platforms, followed by repeated Studio runs. An observed failure must
+still be investigated; the earlier macOS event is not retroactively declared
+a proven FD reuse event.
