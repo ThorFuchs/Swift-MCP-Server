@@ -90,12 +90,15 @@ actor SubscriptionHub {
         // Reserve the subscriber quota before awaits. Publication starts only
         // after the acknowledgment has been queued on this serial owner.
         let id = UUID(); entries[id] = .init(key:key,context:context,channel:channel,filters:filters)
+        NotificationDeliveryTrace.mark("subscription.register", channel: channel.traceID,
+            detail: "tools=\(filters.tools) prompts=\(filters.prompts) resources=\(filters.resources)")
         do {
             let meta = try await RuntimeJSON.object([.init("io.modelcontextprotocol/subscriptionId",value:context.id.value)],budget:context.budget)
             let params = try await RuntimeJSON.object([.init("_meta",value:meta),.init("notifications",value:filters.raw)],budget:context.budget)
             let ack = try await RuntimeJSON.object([.init("jsonrpc",value:.string("2.0")),.init("method",value:.string("notifications/subscriptions/acknowledged")),.init("params",value:params)],budget:context.budget)
             try context.checkCancellation(); try await channel.emit(ack,as:.SubscriptionsAcknowledgedNotification)
             entries[id]!.ready = true
+            NotificationDeliveryTrace.mark("subscription.ready", channel: channel.traceID)
             for activation in filters.activations { await activation.subscription.activated(activation.members, context) }
             let end = ContinuousClock.now.advanced(by:.milliseconds(policy.subscriptionLifetimeMilliseconds))
             while entries[id]?.close == false, ContinuousClock.now < end {
@@ -103,6 +106,8 @@ actor SubscriptionHub {
                 try await Task.sleep(for:.milliseconds(10))
             }
             try context.checkCancellation()
+            NotificationDeliveryTrace.mark("subscription.remove", channel: channel.traceID,
+                detail: "reason=\(entries[id]?.close == true ? "close" : "lifetime")")
             entries.removeValue(forKey:id)
             // Frozen cancellation prose applies to server-initiated teardown
             // on either transport. D02's graceful complete result follows it.
@@ -114,7 +119,11 @@ actor SubscriptionHub {
             try await channel.emit(cancel,as:.CancelledNotification)
             let metadata = try await RuntimeJSON.overlay(meta,members:[.init(ProtocolMetadata.serverInfo,value:info)],budget:context.budget)
             return try await RuntimeJSON.object([.init("resultType",value:.string("complete")),.init("_meta",value:metadata)],budget:context.budget)
-        } catch { entries.removeValue(forKey:id); throw error }
+        } catch {
+            NotificationDeliveryTrace.mark("subscription.remove", channel: channel.traceID,
+                detail: "reason=\(NotificationDeliveryTrace.failure(error)) taskCancelled=\(Task.isCancelled) contextCancelled=\(context.cancellation.cancelled)")
+            entries.removeValue(forKey:id); throw error
+        }
     }
     func publish(_ event: SubscriptionEvent, audience: SubscriptionAudience, budget: RequestBudget) async throws {
         let audienceBytes: Int
@@ -136,6 +145,15 @@ actor SubscriptionHub {
         // Finite snapshot of at most policy.subscriptions; independent producer
         // admission/work prevents one task per blocked subscriber or event.
         let targets = entries.filter { $0.value.ready && !$0.value.close && $0.value.filters.accepts(event) && audience.permits($0.value.context.principal) }
+        let traceKind = NotificationDeliveryTrace.kind(event.definition)
+        if let traceKind, NotificationDeliveryTrace.enabled {
+            NotificationDeliveryTrace.mark("publish.select", kind: traceKind,
+                detail: "entries=\(entries.count) targets=\(targets.count)")
+            for (id, entry) in entries {
+                NotificationDeliveryTrace.mark("publish.inspect", channel: entry.channel.traceID, kind: traceKind,
+                    detail: "ready=\(entry.ready) close=\(entry.close) filter=\(entry.filters.accepts(event)) cancelled=\(entry.context.cancellation.cancelled) selected=\(targets[id] != nil)")
+            }
+        }
         for (id,entry) in targets {
             do {
                 try entry.context.checkCancellation()
@@ -149,8 +167,12 @@ actor SubscriptionHub {
                 }
                 let params = try await RuntimeJSON.object(members,budget:budget)
                 let raw = try await RuntimeJSON.object([.init("jsonrpc",value:.string("2.0")),.init("method",value:.string(event.method)),.init("params",value:params)],budget:budget)
+                if let traceKind { NotificationDeliveryTrace.mark("publish.emit.begin", channel: entry.channel.traceID, kind: traceKind) }
                 try await entry.channel.emit(raw,as:event.definition,replaceable:ScalarText(event.method + { if case .resourceUpdated(let uri) = event { return "\0" + uri.description }; return "" }()))
+                if let traceKind { NotificationDeliveryTrace.mark("publish.emit.return", channel: entry.channel.traceID, kind: traceKind) }
             } catch {
+                if let traceKind { NotificationDeliveryTrace.mark("publish.emit.error", channel: entry.channel.traceID, kind: traceKind,
+                    detail: "reason=\(NotificationDeliveryTrace.failure(error)) contextCancelled=\(entry.context.cancellation.cancelled)") }
                 if error as? CoreFailure == .eventsUnavailable || entry.context.cancellation.cancelled { continue }
                 if var current = entries[id] { current.close = true; entries[id] = current }
                 await entry.channel.abort(failure:true)
@@ -192,16 +214,28 @@ actor SubscriptionHub {
     }
     func close(_ key:RequestKey) -> Bool {
         var found = false
-        for id in entries.keys where entries[id]!.key == key { entries[id]!.close = true; found = true }
+        for id in entries.keys where entries[id]!.key == key {
+            NotificationDeliveryTrace.mark("subscription.close", channel: entries[id]!.channel.traceID, detail: "reason=correlation")
+            entries[id]!.close = true; found = true
+        }
         return found
     }
-    func closeAll() { for id in entries.keys { entries[id]!.close = true } }
+    func closeAll() { for id in entries.keys {
+        NotificationDeliveryTrace.mark("subscription.close", channel: entries[id]!.channel.traceID, detail: "reason=all")
+        entries[id]!.close = true
+    } }
     func close(_ principal: VerifiedPrincipal, origin: ScalarText) {
         for id in entries.keys where PrincipalKey(entries[id]!.context.principal) == PrincipalKey(principal)
-            && entries[id]!.context.origin == origin { entries[id]!.close = true }
+            && entries[id]!.context.origin == origin {
+                NotificationDeliveryTrace.mark("subscription.close", channel: entries[id]!.channel.traceID, detail: "reason=origin")
+                entries[id]!.close = true
+            }
     }
     func revoke(_ principal: VerifiedPrincipal) {
-        for entry in entries.values where PrincipalKey(entry.context.principal) == PrincipalKey(principal) { entry.context.cancellation.cancel() }
+        for entry in entries.values where PrincipalKey(entry.context.principal) == PrincipalKey(principal) {
+            NotificationDeliveryTrace.mark("subscription.close", channel: entry.channel.traceID, detail: "reason=revoke")
+            entry.context.cancellation.cancel()
+        }
     }
     var count: Int { entries.count }
 }

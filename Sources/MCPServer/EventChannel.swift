@@ -56,7 +56,8 @@ actor EventLedger {
     }
 }
 actor EventChannel {
-    struct Frame: Sendable { let data: Data, ticket: EventLedger.Ticket, replaceable: ScalarText? }
+    nonisolated let traceID = UUID()
+    struct Frame: Sendable { let data: Data, ticket: EventLedger.Ticket, replaceable: ScalarText?, traceKind: String? }
     enum Next: Sendable { case frame(Frame), terminal(Data?), waiting }
     let policy: EventPolicy, ledger: EventLedger, principal: PrincipalKey, budget: RequestBudget, wire: PreparedWire
     private var queue: [Frame] = []
@@ -80,9 +81,14 @@ actor EventChannel {
     // validated the server-constructed envelope. It uses the same bounded owner.
     func emitSupplemental(_ value: JSON, replaceable: ScalarText? = nil) async throws { try await emitPrepared(value, definition: nil, replaceable: replaceable) }
     private func emitPrepared(_ value: JSON, definition: FrozenWireDefinition?, replaceable: ScalarText?) async throws {
+        let traceKind = NotificationDeliveryTrace.kind(definition)
+        if let traceKind { NotificationDeliveryTrace.mark("queue.enter", channel: traceID, kind: traceKind,
+            detail: "finishing=\(finishing) ended=\(ended) failed=\(failed)") }
         guard !finishing, !ended, !failed else { throw CoreFailure.eventsUnavailable }
         if let key = replaceable, let index = queue.firstIndex(where: { $0.replaceable == key }) {
-            let old = queue.remove(at: index); try await release(old)
+            let old = queue.remove(at: index)
+            if let kind = old.traceKind { NotificationDeliveryTrace.mark("queue.replace", channel: traceID, kind: kind) }
+            try await release(old)
         }
         guard emitted < policy.maximumEvents, slots < policy.queuedEvents, bytes < policy.queuedBytes else {
             await abort(failure: true); throw CoreFailure.eventOverflow
@@ -102,7 +108,8 @@ actor EventChannel {
             guard !finishing, !ended, !failed else { throw CoreFailure.eventsUnavailable }
             ticket = try await ledger.resize(ticket, to: data.count)
             bytes -= capacity - data.count
-            queue.append(.init(data: data, ticket: ticket, replaceable: replaceable))
+            queue.append(.init(data: data, ticket: ticket, replaceable: replaceable, traceKind: traceKind))
+            if let traceKind { NotificationDeliveryTrace.mark("queue.accept", channel: traceID, kind: traceKind) }
         } catch {
             slots -= 1; bytes -= ticket.bytes; try await ledger.release(ticket)
             if !finishing { await abort(failure: true) }; throw error
@@ -124,7 +131,10 @@ actor EventChannel {
     func abort(failure: Bool = false) async {
         failed = failed || failure; ended = true; finishing = true; terminal = nil
         let discarded = queue; queue.removeAll()
-        for frame in discarded { do { try await release(frame) } catch { failed = true } }
+        for frame in discarded {
+            if let kind = frame.traceKind { NotificationDeliveryTrace.mark("queue.discard", channel: traceID, kind: kind, detail: "failure=\(failure)") }
+            do { try await release(frame) } catch { failed = true }
+        }
     }
     func write(to sink: @escaping ResponseSink, allowance: UInt64) async throws {
         var remaining = allowance
@@ -133,7 +143,15 @@ actor EventChannel {
                 try Task.checkCancellation()
                 switch take() {
                 case .frame(let frame):
-                    do { try await sink(frame.data) } catch { try await release(frame); throw CoreFailure.disconnected }
+                    if let kind = frame.traceKind { NotificationDeliveryTrace.mark("sink.begin", channel: traceID, kind: kind) }
+                    do {
+                        try await sink(frame.data)
+                        if let kind = frame.traceKind { NotificationDeliveryTrace.mark("sink.return", channel: traceID, kind: kind) }
+                    } catch {
+                        if let kind = frame.traceKind { NotificationDeliveryTrace.mark("sink.error", channel: traceID, kind: kind,
+                            detail: "reason=\(NotificationDeliveryTrace.failure(error))") }
+                        try await release(frame); throw CoreFailure.disconnected
+                    }
                     try await release(frame)
                 case .terminal(let bytes): if let bytes { try await sink(bytes) }; return
                 case .waiting:
