@@ -85,3 +85,10 @@ New branch holds the candidate without opening or updating PR #57 while the
 independent Studio notification proof runs. Native Swift 6.4.2 qualification
 on the immutable RED and candidate heads, full macOS/Linux CI and HTTP
 fixture interoperability remain required.
+
+
+Additional test-first controls: canonically equivalent but byte-distinct
+opaque cursors must not complete a chain; a later failed head leaves
+previously validated metadata intact and supersedes an older in-flight
+head. Scripted transport compares cursor identities via existing ScalarText.
+Fifteen total public test functions; seven original test bodies unchanged.
