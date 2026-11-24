@@ -18,7 +18,7 @@ private func shell(_ script: String, arguments: [String] = [],
         standardError: onStderr))
 }
 
-private struct CapturedStderr: Sendable {
+private final class CapturedStderr: Sendable {
     private let lines = Mutex<[String]>([])
     func append(_ line: String) { lines.withLock { $0.append(line) } }
     var snapshot: [String] { lines.withLock { $0 } }
