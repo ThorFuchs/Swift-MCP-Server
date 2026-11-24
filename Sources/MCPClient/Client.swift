@@ -16,8 +16,10 @@ import Synchronization
 /// opaque `requestState` (MRTR). Requests run concurrently on the calling tasks; cancelling
 /// a call cancels its exchange. The client keeps no session and owns no tasks.
 public actor Client {
+    /// Frozen protocol revision emitted in every request.
     public static let protocolVersion = "2026-07-28"
 
+    /// Host-supplied capability declarations, handlers and parsing limits.
     public nonisolated let configuration: ClientConfiguration
     private let transport: any ClientTransport
     private let validator = WireValidator()
@@ -29,6 +31,7 @@ public actor Client {
     /// Tools dropped from `tools/list` because of invalid `x-mcp-header` annotations.
     public private(set) var rejectedTools: [RejectedTool] = []
 
+    /// Creates a client over a supplied transport without starting it or discovering the server.
     public init(transport: any ClientTransport, configuration: ClientConfiguration = .init()) {
         self.transport = transport; self.configuration = configuration
     }
@@ -83,9 +86,11 @@ public actor Client {
         return tool
     }
 
+    /// Returns a validated resource page; nil starts a listing.
     public func listResources(cursor: String? = nil) async throws -> Page<Resource> {
         try await page("resources/list", key: "resources", cursor: cursor, definition: .ListResourcesResult, Resource.init)
     }
+    /// Returns a validated resource-template page, preserving original URI templates.
     public func listResourceTemplates(cursor: String? = nil) async throws -> Page<ResourceTemplate> {
         try await page("resources/templates/list", key: "resourceTemplates", cursor: cursor, definition: .ListResourceTemplatesResult, ResourceTemplate.init)
     }
@@ -95,6 +100,7 @@ public actor Client {
         return try (result.objectValue?["contents"]?.arrayValue ?? []).map(ResourceContents.init)
     }
 
+    /// Returns a validated prompt page; pass the opaque next cursor to continue.
     public func listPrompts(cursor: String? = nil) async throws -> Page<Prompt> {
         try await page("prompts/list", key: "prompts", cursor: cursor, definition: .ListPromptsResult, Prompt.init)
     }

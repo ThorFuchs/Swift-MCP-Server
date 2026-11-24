@@ -11,6 +11,7 @@ import System
 import SystemPackage
 #endif
 
+/// Failures of the exchange channel or its owning child-process lifetime.
 public enum StdioClientTransportError: Error, Sendable, Equatable {
     /// `exchange` was called while `run()` is not active.
     case notRunning
@@ -39,16 +40,25 @@ public enum StdioClientTransportError: Error, Sendable, Equatable {
 /// cannot be correlated on stdio and are dropped. Cancelling a call sends
 /// `notifications/cancelled` for its ID.
 public final class StdioClientTransport: ClientTransport, Sendable {
+    /// Host-selected child process, exchange bounds and diagnostic sink.
     public struct Configuration: Sendable {
+        /// Child executable selected by the host.
         public var executable: Executable
+        /// Arguments passed directly to the executable.
         public var arguments: [String]
+        /// Overrides applied to the inherited process environment. Do not log secrets.
         public var environment: [String: String]
+        /// Optional working directory for the child.
         public var workingDirectory: String?
+        /// Maximum concurrent admitted exchanges; the initializer clamps this to at least one.
         public var maximumPendingRequests: Int
+        /// Maximum bytes accepted in a framed input line.
         public var maximumMessageBytes: Int
+        /// Grace interval before forced child termination during cancellation; not an idle deadline.
         public var terminationGrace: Duration
         /// Receives the server's standard error, line by line (ignored when nil).
         public var standardError: (@Sendable (String) -> Void)?
+        /// Creates a child configuration; the host chooses the executable and owns its trust boundary.
         public init(executable: Executable, arguments: [String] = [], environment: [String: String] = [:], workingDirectory: String? = nil,
                     maximumPendingRequests: Int = 64, maximumMessageBytes: Int = 16 * 1024 * 1024, terminationGrace: Duration = .seconds(2),
                     standardError: (@Sendable (String) -> Void)? = nil) {
@@ -69,9 +79,11 @@ public final class StdioClientTransport: ClientTransport, Sendable {
         var running = false
     }
 
+    /// Configuration used for each caller-owned run.
     public let configuration: Configuration
     private let state = Mutex(State())
 
+    /// Constructs the transport without launching a process.
     public init(configuration: Configuration) { self.configuration = configuration }
 
 
@@ -152,6 +164,7 @@ public final class StdioClientTransport: ClientTransport, Sendable {
 
     // MARK: Exchanges
 
+    /// Sends a request on the active child; receiver suspension provides backpressure. Pending requests fail at stdout EOF.
     public func exchange(_ request: OutgoingRequest, receive: @escaping @Sendable (Data) async throws -> Void) async throws {
         let key = Self.key(request.id.value)
         let token = (try? WireCodec.parse(Array(request.body), limits: .balanced).result)?

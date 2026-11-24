@@ -5,7 +5,9 @@ import MCPProtocol
 /// One encoded request and the routing data a transport needs (HTTP sets `Mcp-Method` and
 /// `Mcp-Name` from it).
 public struct OutgoingRequest: Sendable {
+    /// JSON-RPC identifier used to correlate the response.
     public let id: RequestID
+    /// Protocol method carried in the encoded request.
     public let method: String
     /// `params.name` or `params.uri` for methods that route by name (tools/call, prompts/get,
     /// resources/read) and the task ID for `tasks/*`; nil otherwise.
@@ -14,6 +16,7 @@ public struct OutgoingRequest: Sendable {
     public let body: Data
     /// Already-encoded `Mcp-Param-*` headers for `tools/call` (see `ToolHeaders`).
     public let parameterHeaders: [(name: String, value: String)]
+    /// Creates the wire request and its transport routing metadata.
     public init(id: RequestID, method: String, name: String?, body: Data, parameterHeaders: [(name: String, value: String)] = []) {
         self.id = id; self.method = method; self.name = name; self.body = body; self.parameterHeaders = parameterHeaders
     }
@@ -36,5 +39,6 @@ public protocol ClientTransport: Sendable {
 }
 
 extension ClientTransport {
+    /// Default for transports without HTTP parameter-header mirroring.
     public var mirrorsToolParameters: Bool { false }
 }

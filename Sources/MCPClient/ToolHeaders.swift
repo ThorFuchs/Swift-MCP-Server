@@ -6,14 +6,18 @@ import JSON
 /// Parameters*): which argument, at which `properties` path, is mirrored into which
 /// `Mcp-Param-{name}` header.
 public struct ToolHeaders: Sendable {
+    /// Supported scalar types for parameter-to-header mirroring.
     public enum Primitive: String, Sendable { case string, integer, boolean }
+    /// A statically reachable argument path, header name and scalar type.
     public struct Declaration: Sendable {
         public let path: [String]
         public let name: String
         public let primitive: Primitive
     }
+    /// Validated parameter-header declarations extracted from the input schema.
     public let declarations: [Declaration]
 
+    /// An invalid annotation prevents the tool from being mirrored safely.
     public struct Invalid: Error, Sendable, CustomStringConvertible {
         public let reason: String
         public var description: String { reason }
