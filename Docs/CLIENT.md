@@ -64,6 +64,23 @@ Transports:
 - **Tool headers.** On Streamable HTTP, `x-mcp-header` parameters are mirrored into
   `Mcp-Param-*` headers with the specification's encoding; tools with invalid annotations
   are dropped from `tools/list` and listed in `rejectedTools`.
+  Routing and output-validation metadata follow successful listing pages. A fresh
+  listing starts with a nil cursor; observed names replace their previous metadata.
+  Unvisited names retain their last known metadata while pagination is incomplete.
+  A successful terminal page of that chain retires unobserved names, including
+  old rejection diagnostics. Rejections describe one latest observation per name,
+  sorted by name; a valid redefinition removes its rejection. An empty string is
+  a valid continuation cursor. An independent cursor page updates observed names
+  but does not prove removal of others or complete an unrelated listing chain.
+  A malformed, failed or cancelled page does not commit metadata.
+  Concurrent cursorless requests use latest-initiated ownership of the metadata
+  commit (including when the latest request fails); continuations commit only if
+  the local revision observed at their start has not changed. A superseded
+  successful request still returns its own validated page. No global server
+  snapshot is implied. A call captures its routing and output schema before
+  exchange, including across input rounds and callbacks. A list-changed event
+  is delivered to the caller, who may explicitly relist; the client neither
+  starts background refreshes nor discards validation solely on receipt of an event.
 - **Raw values.** Typed views keep the raw JSON, so schemas pass through unchanged and are
   never dereferenced over the network.
 - **Compatibility.** A result without `resultType` is `complete`. `-32022` is retried

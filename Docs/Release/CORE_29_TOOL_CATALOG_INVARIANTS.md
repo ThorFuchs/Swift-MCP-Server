@@ -53,3 +53,35 @@ Add six test-first public API contracts:
 The overlap tests use explicit one-use transport rendezvous, not delays to order requests; the 10-second timer is a failure bound for a missing rendezvous. All seven original test bodies remain unchanged; no existing assertions weakened. Thirteen test functions, one serialized new suite, no fixture or production changes. Expected new controls and failures require actual native execution; not a fresh RED claim.
 
 The choice is local metadata consistency, not a server revision protocol. A failed/cancelled page leaves metadata unchanged; a superseded valid page still returns its own validated view. Notification-only behavior remains explicit host refresh, no automatic network requests and no validation bypass. Full retained-byte/count limits and auth-context changes remain a separate audit; the tests do not assert a global server snapshot.
+
+
+## Implementation candidate (after test-only replay `377c4225942dcc8982f0de46ec94f629fdabf827`)
+
+Replace the independent growing maps and rejection history by a coherent
+private per-name metadata record. Each page is wire-validated and locally
+classified before one actor-isolated, non-suspending commit. Track the
+observed names in a nil-origin listing chain, not an inferred server version.
+A successful terminal page retires unvisited entries; incomplete chains keep
+previously known validation for unvisited names. Matching continuation cursors
+are opaque, including empty strings. An independent cursor response may update
+observations, but abandons chain completeness (no deletion). Failed pages do
+not update the state. Capture a local revision at request entry; late
+continuations cannot overwrite a newer committed observation. For concurrent
+heads, latest initiated owns the commit even if it subsequently fails;
+previous validated metadata remains intact on failure. This is deliberately
+a local ordering policy, not a promise of consistent server pages. Calls pin
+the observed routing and validation together before any asynchronous exchange
+and reuse that output schema for the final result; no validation is relaxed
+by a concurrent refresh. Direct calls without a known schema still go to the
+server, as before. Invalid HTTP header tools remain excluded from returned
+items, raw JSON unchanged; their observed output schema remains available for
+direct-call validation, matching the prior policy.
+
+No public signatures, dependencies, fixture sources, original tests,
+timeouts, or wire validation changes. Per-client cardinality/byte ceilings,
+authorization-context identity, notification-only invalidation policy and
+duplicate-name protocol semantics are deferred follow-ups, not passed gates.
+New branch holds the candidate without opening or updating PR #57 while the
+independent Studio notification proof runs. Native Swift 6.4.2 qualification
+on the immutable RED and candidate heads, full macOS/Linux CI and HTTP
+fixture interoperability remain required.
