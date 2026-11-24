@@ -279,7 +279,11 @@ struct Dispatcher: Sendable {
             }
             if let key = slot.key.withLock({ $0 }) { await ownership.remove(key) }
         } catch {
-            if let channel { await channel.abort() }
+            if let channel {
+                NotificationDeliveryTrace.mark("dispatch.error", channel: channel.traceID,
+                    detail: "reason=\(NotificationDeliveryTrace.failure(error)) deadline=\(cancellation.reason == .deadline) taskCancelled=\(Task.isCancelled) contextCancelled=\(cancellation.cancelled)")
+                await channel.abort()
+            }
             let reason = cancellation.reason
             cancellation.cancel(); await budget.terminate()
             _ = await terminal.claim(error is CancellationError || error as? CoreFailure == .deadline ? .cancelled : .failure)
