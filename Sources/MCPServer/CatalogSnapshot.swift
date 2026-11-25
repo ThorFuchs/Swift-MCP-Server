@@ -49,7 +49,7 @@ struct CatalogSnapshot: Sendable {
     let promptIndex: [ScalarText: PromptProvider]
 
     static func prepare(_ catalog: ServerCatalog, generation: UInt64, wire: PreparedWire,
-                        configuration: ServerConfiguration, budget: RequestBudget) async throws -> Self {
+                        configuration: ServerConfiguration, budget: RequestBudget, previous: CatalogSnapshot? = nil) async throws -> Self {
         try await budget.consume(UInt64(catalog.listChanged.count) * 64)
         var count = 0
         for addition in [catalog.tools.count, catalog.resources.count, catalog.templates.count, catalog.prompts.count] {
@@ -83,9 +83,12 @@ struct CatalogSnapshot: Sendable {
             let name = try await admit(tool.definition, as: .Tool, identity: "name")
             guard names.insert(name).inserted else { throw CoreFailure.duplicate }
             let object = tool.definition.objectValue!
-            let input = try await SchemaPreparation.prepare(object["inputSchema"]!, identifier: generation, budget: budget)
+            let prior = previous?.toolIndex[name]
+            let input = try await SchemaPreparation.prepareReplacement(object["inputSchema"]!, previous: prior?.input, identifier: generation, budget: budget)
             let output: PreparedSchema?
-            if let raw = object["outputSchema"] { output = try await SchemaPreparation.prepare(raw, identifier: generation, budget: budget) } else { output = nil }
+            if let raw = object["outputSchema"] {
+                output = try await SchemaPreparation.prepareReplacement(raw, previous: prior?.output, identifier: generation, budget: budget)
+            } else { output = nil }
             let headers = try await SchemaPreparation.headers(for: input, budget: budget)
             let addition = input.logicalRetainedUpperBound + (output?.logicalRetainedUpperBound ?? 0)
             guard addition <= 33_554_432 - weight else { throw CoreFailure.limit }; weight += addition
@@ -155,7 +158,7 @@ actor CatalogStore {
         guard !preparing, current.generation < UInt64.max else { throw CoreFailure.staleGeneration }
         preparing = true
         do {
-            let next = try await CatalogSnapshot.prepare(catalog, generation: current.generation + 1, wire: wire, configuration: configuration, budget: budget)
+            let next = try await CatalogSnapshot.prepare(catalog, generation: current.generation + 1, wire: wire, configuration: configuration, budget: budget, previous: current)
             let retained = held.values.reduce(UInt64(0)) { $0 + $1.snapshot.weight }
             guard retained <= limit, next.weight <= limit - retained else { throw CoreFailure.limit }
             current = next; preparing = false
