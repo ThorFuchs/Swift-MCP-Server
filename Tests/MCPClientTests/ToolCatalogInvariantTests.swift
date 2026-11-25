@@ -133,13 +133,20 @@ private actor CatalogTransport: ClientTransport {
         case .result(let result): key = "result"; payload = result
         case .error(let error): key = "error"; payload = error
         }
+        // Bind the subscription-only fixture placeholder to the actual
+        // outgoing JSON-RPC ID, preserving the callback/relist assertions.
+        let wireID = String(decoding: try WireCodec.write(request.id.value, limits: .balanced).result, as: UTF8.self)
+        func bind(_ fixture: String) -> String {
+            guard request.method == "subscriptions/listen" else { return fixture }
+            return fixture.replacingOccurrences(of: #""$subscriptionID""#, with: wireID)
+        }
         let reply = JSON.object(try JSONObject(members: [
             JSONMember("jsonrpc", value: .string("2.0")),
             JSONMember("id", value: request.id.value),
-            JSONMember(key, value: try parseCatalogJSON(payload))
+            JSONMember(key, value: try parseCatalogJSON(bind(payload)))
         ]))
         for notification in step.notifications {
-            try await receive(Data(notification.utf8))
+            try await receive(Data(bind(notification).utf8))
         }
         try await receive(try WireCodec.write(reply, limits: .balanced).result)
     }
@@ -302,9 +309,9 @@ private actor CatalogTransport: ClientTransport {
     }
 
     @Test func toolsChangedCallbackCanRefreshWithoutRetainingRetiredHeaders() async throws {
-        let acknowledged = #"{"jsonrpc":"2.0","method":"notifications/subscriptions/acknowledged","params":{"_meta":{"io.modelcontextprotocol/subscriptionId":"listen-1"},"notifications":{"toolsListChanged":true}}}"#
-        let changed = #"{"jsonrpc":"2.0","method":"notifications/tools/list_changed","params":{"_meta":{"io.modelcontextprotocol/subscriptionId":"listen-1"}}}"#
-        let closed = #"{"resultType":"complete","_meta":{"io.modelcontextprotocol/subscriptionId":"listen-1"}}"#
+        let acknowledged = #"{"jsonrpc":"2.0","method":"notifications/subscriptions/acknowledged","params":{"_meta":{"io.modelcontextprotocol/subscriptionId":"$subscriptionID"},"notifications":{"toolsListChanged":true}}}"#
+        let changed = #"{"jsonrpc":"2.0","method":"notifications/tools/list_changed","params":{"_meta":{"io.modelcontextprotocol/subscriptionId":"$subscriptionID"}}}"#
+        let closed = #"{"resultType":"complete","_meta":{"io.modelcontextprotocol/subscriptionId":"$subscriptionID"}}"#
         let transport = CatalogTransport([
             .list([catalogTool("weather", header: "Region")]),
             .init(method: "subscriptions/listen", payload: .result(closed), notifications: [acknowledged, changed]),
