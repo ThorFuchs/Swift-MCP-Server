@@ -95,3 +95,77 @@ Before integration: full Scripts/test.sh with locked graph on macOS/Linux,
 optimized tests with matching fixtures and external HTTP qualification; new
 native stdio/HTTP coverage when lifecycle/transport behavior changes.
 No PR merge, release or #29 closure authorized by this test-first batch.
+
+
+## A2.2a — native RED confirmed; GREEN candidate implemented
+
+Native RED source `d6959e4395b645a7c142bc90bc41852dd4925710`, original nine-test blob
+`0958149436c367f89acddac099aee221897cb5f0`. Original archive
+`core-a22a-red-RibTykFM.tar.gz`, 4659 bytes, SHA-256
+`81079eaa056f983effcfe050f5f59b2189ccc830ef4b97eeedea54034e6555e9`.
+[Reviewed receipt](https://github.com/ThorFuchs/Swift-MCP-Server/issues/29#issuecomment-7174784830).
+Reopened original archive: native Apple Swift 6.4.2/macOS 27.3 ARM64,
+build succeeded; two positive controls passed, seven named regressions
+failed with 19 issues, test exit 1; all six dependency hashes identical
+and final verifier PASS. This is an actual test-first RED, not a build failure.
+
+### Implementation
+
+- `SubscriptionAdmission` is an internal, exchange-local object, allocated
+  only when typed `listen` supplies its callback. Its requested known-Core
+  filter derives from the actual encoded filter object. A short mutex
+  protects the optional acknowledged filter; no suspension or callback
+  occurs under the lock. No global state or new task.
+- After frozen validation of known notifications, correlate the
+  subscription metadata with the actual numeric request ID, admit exactly
+  one ACK and only a known-Core subset, then validate the known event
+  filter before forwarding. Resource URIs use `ScalarText` identity,
+  not canonical-equivalence or URL normalization.
+- For raw extension callbacks retain original params and ACK filter
+  payload; enforce ACK order and subscription-ID correlation, not an
+  invented generic extension-filter grammar. No change to existing
+  extension validation responsibility.
+- Successful completion retains normal result schema validation, then
+  requires ACK and matching terminal subscription metadata. Reject a
+  notification delivered after an outer terminal response on this
+  exchange. Ordinary server errors (including rejection before ACK)
+  retain existing typed behavior.
+- The existing server-cancelled control notification, progress/log
+  handling, generic request API, version retry, MRTR engine, and stdio/
+  HTTP lifetime policies are otherwise unchanged. This slice does not
+  prove cancellation ownership, late callbacks on a nonconforming
+  transport, physical demultiplexing, reconnect, or extension member
+  authorization. Those remain A2.2b/c/d gates.
+- The original nine RED tests are byte-identical. The historical A2.1
+  callback/relist fixture's three literal subscription IDs are bound to
+  the actual outgoing request ID in its synthetic transport; no
+  assertion or original test intent is changed.
+
+### Additional controls and admission
+
+Eight new public-API boundary functions cover supported resource and
+extension subset with unchanged raw payload and graceful server-cancel
+plus completion; unrequested resource ACK and unacknowledged resource
+event; foreign extension event; completion before ACK; typed pre-ACK
+server error; notification after terminal; two overlapping independent
+subscriptions (rendezvous after both ACKs, bounded failure only).
+No sleep chooses sequencing. These are scripted exchange tests, not
+native socket/process qualification.
+
+The two new Swift files were parsed successfully with local Swift 6.2.1
+x86_64 Linux; their remote blobs equal the parsed files
+(`030e1f8d53389c253f505ac2b9f9a5ba70cd79e2` admission;
+`ad51216250d880147202ff1fbb25c281a9384ed4` boundary tests).
+Integration edits and A2.1 fixture bind were reviewed against the exact
+remote sources; no Swift 6.4.2 compilation or native GREEN claimed yet.
+Local environment cannot resolve GitHub or run the required 6.4.2 graph.
+
+Next: exact candidate, clean detached checkout, same locked dependency
+files. Focused Debug and Release: 9 original + 8 additional + 15 A2.1
+functions = 32 expected each. Full locked native Debug via Scripts/test.sh:
+361 expected functions (344 previous + 17), including real stdio and
+Tasks client coverage. Verify actual inventory, exit and dependency hashes;
+open review PR after native evidence. Full macOS/Linux Debug and optimized
+CI and fresh external HTTP interoperability still required before
+integration. No public signature, package, reference, existing timeout
+or release-scope change. #29/#30 remain open.
