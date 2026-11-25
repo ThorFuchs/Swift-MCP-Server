@@ -24,11 +24,23 @@ public actor Client {
     private let transport: any ClientTransport
     private let validator = WireValidator()
     private var nextID = 1
-    /// `x-mcp-header` declarations from the latest `tools/list` pages, by tool name.
-    private var toolHeaders: [String: ToolHeaders] = [:]
-    /// `outputSchema` of every tool from the latest `tools/list` pages, by tool name.
-    private var outputSchemas: [String: JSON] = [:]
-    /// Tools dropped from `tools/list` because of invalid `x-mcp-header` annotations.
+    // Routing and validation always come from the same observed definition.
+    private struct ToolMetadata {
+        let headers: ToolHeaders?
+        let outputSchema: JSON?
+        let rejection: RejectedTool?
+    }
+    private struct ToolListing {
+        let nextCursor: String
+        let observedNames: Set<String>
+    }
+    private var toolMetadata: [String: ToolMetadata] = [:]
+    private var toolListing: ToolListing?
+    // Opaque local tickets only: never interpret server cursors as generations.
+    private var catalogRevision = UUID()
+    private var latestListingHead: UUID?
+    /// Latest known rejected definitions, one per tool name, ordered by name.
+    /// Unvisited names retain their last validated metadata during a partial listing.
     public private(set) var rejectedTools: [RejectedTool] = []
 
     /// Creates a client over a supplied transport without starting it or discovering the server.
@@ -54,14 +66,60 @@ public actor Client {
 
     /// `tools/list`. On transports that mirror tool parameters into headers, tools with
     /// invalid `x-mcp-header` annotations are excluded and recorded in `rejectedTools`.
+    /// Successful pages update observed metadata; a completed listing started at nil
+    /// retires names not observed in that chain. Failed pages leave metadata intact.
+    /// Concurrent superseded pages return their own validated results without changing
+    /// call metadata. This is a local policy, not a server snapshot guarantee.
     public func listTools(cursor: String? = nil) async throws -> Page<Tool> {
+        try Task.checkCancellation()
+        let revision = catalogRevision
+        let head = cursor == nil ? UUID() : nil
+        if let head { latestListingHead = head }
+
         let page = try await page("tools/list", key: "tools", cursor: cursor, definition: .ListToolsResult, Tool.init)
-        for tool in page.items { outputSchemas[tool.name] = tool.outputSchema }
-        guard transport.mirrorsToolParameters else { return page }
         var kept: [Tool] = []
+        var observations: [String: ToolMetadata] = [:]
         for tool in page.items {
-            do { toolHeaders[tool.name] = try ToolHeaders(inputSchema: tool.inputSchema); kept.append(tool) }
-            catch { toolHeaders[tool.name] = nil; rejectedTools.append(RejectedTool(name: tool.name, reason: String(describing: error))) }
+            var headers: ToolHeaders?
+            var rejection: RejectedTool?
+            if transport.mirrorsToolParameters {
+                do { headers = try ToolHeaders(inputSchema: tool.inputSchema) }
+                catch { rejection = RejectedTool(name: tool.name, reason: String(describing: error)) }
+            }
+            if rejection == nil { kept.append(tool) }
+            observations[tool.name] = ToolMetadata(headers: headers, outputSchema: tool.outputSchema, rejection: rejection)
+        }
+        try Task.checkCancellation()
+        // No suspension between admission of a validated page and the commit.
+        // A later-started head supersedes earlier heads, even if it fails.
+        // A concurrent continuation can only commit against the revision it read.
+        let mayCommit = head.map { latestListingHead == $0 } ?? (catalogRevision == revision)
+        if mayCommit {
+            var observedNames: Set<String>?
+            if head != nil {
+                observedNames = []
+            } else if let listing = toolListing, let cursor,
+                      ScalarText(cursor) == ScalarText(listing.nextCursor) {
+                observedNames = listing.observedNames
+            }
+            // An independent cursor page can update its own names, but cannot
+            // establish completeness of any chain. Do not retire unseen tools.
+            for (name, metadata) in observations {
+                toolMetadata[name] = metadata
+                observedNames?.insert(name)
+            }
+            if let observedNames {
+                if let next = page.nextCursor {
+                    toolListing = ToolListing(nextCursor: next, observedNames: observedNames)
+                } else {
+                    toolMetadata = toolMetadata.filter { observedNames.contains($0.key) }
+                    toolListing = nil
+                }
+            } else {
+                toolListing = nil
+            }
+            rejectedTools = toolMetadata.values.compactMap(\.rejection).sorted { $0.name < $1.name }
+            catalogRevision = UUID()
         }
         return Page(items: kept, nextCursor: page.nextCursor, raw: page.raw)
     }
@@ -72,12 +130,15 @@ public actor Client {
                          onLog: (@Sendable (LogMessage) async -> Void)? = nil) async throws -> ToolResult {
         var params = [JSONMember("name", value: .string(name))]
         if let arguments { params.append(JSONMember("arguments", value: arguments)) }
-        let headers = transport.mirrorsToolParameters ? toolHeaders[name]?.headers(for: arguments) ?? [] : []
+        // Pin both halves of the same definition for the entire call, including
+        // MRTR and callbacks that may reenter this actor and refresh the catalog.
+        let metadata = toolMetadata[name]
+        let headers = transport.mirrorsToolParameters ? metadata?.headers?.headers(for: arguments) ?? [] : []
         let result = try await perform("tools/call", params: params, name: name, definition: .CallToolResult,
                                        acceptsExtensionResults: true, parameterHeaders: headers, onProgress: onProgress, onLog: onLog)
         let tool = ToolResult(result)
         // A successful result of a tool with an outputSchema must carry conforming structuredContent.
-        if configuration.validatesStructuredContent, tool.resultType == "complete", !tool.isError, let schema = outputSchemas[name] {
+        if configuration.validatesStructuredContent, tool.resultType == "complete", !tool.isError, let schema = metadata?.outputSchema {
             guard let structured = tool.structuredContent else { throw ClientError.invalidResponse("\(name) result without structuredContent") }
             guard try await validator.conforms(structured, to: schema) else {
                 throw ClientError.invalidResponse("structuredContent of \(name) does not match its outputSchema")
