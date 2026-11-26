@@ -103,3 +103,55 @@ an ARM64 result as AMD64. Prefer a separately reviewed opt-in lane and
 record hosted quota/cost. This is an independent platform/RC gate;
 no hosted job dispatched or workflow modified here. No release tag or
 final release decision.
+
+
+## Native RED return and independent diagnostic follow-up
+
+Original [native RED receipt](https://github.com/ThorFuchs/Swift-MCP-Server/issues/29#issuecomment-7195911421):
+`core-a22b1-red-y1Na4fVt.tar.gz`, 4946 bytes, SHA-256
+`367e8eafc1d9477e6d2fc5550d7d5c031aadce5be68874cf8784e478c0e2b35b`.
+Test-only commit `792de228b067ac58b3f55c60fb88d48899147004`, exact tree,
+clean final status, all six dependency hashes unchanged, native Apple
+Swift 6.4.2/macOS 27.3, build successful (90.66 s). Three positive controls
+PASS. Nonterminal callback failure precisely reproduced missing
+notifications/cancelled (two assertions, actual methods
+[subscriptions/listen, probe/recover], no cancellation ID, 0.005 s).
+Pre-cancel case hit suite time limit and returned serverExited instead
+of CancellationError at teardown (two issues, 60.528 s), without a
+complete peer-wire receipt. Under the acceptance contract above this
+is **partial RED, one confirmed and one inconclusive**, not two accepted
+REDs. Preserve original test file and archive.
+
+The new independent `StdioPrecancelDiagnosticCases` suite is at blob
+`f296984a2b1df83cb2a23dea443800e7538bbef9`. Parent explicitly parks
+a task, cancels it before releasing the gate, and records Task.isCancelled
+immediately before the actual public transport exchange. A finite shell
+peer emits READY, RX, ADMITTED and CLEAN markers to the captured test log
+as they arrive. If an erroneous request reaches the peer, it replies
+and exits instead of waiting for an unbounded subsequent operation.
+A separate ordinary-exchange positive control uses the same gate and
+peer. An independent 5-second test-only guard shuts down stdin on
+missing completion, emits a guard marker and fails the test; it is not
+an accepted admission RED by itself. All owned tasks are joined on
+ordinary completion/error paths. Preserve typed cancellation outcome,
+callback count, exact wire inventory and same-transport recovery on the
+correct cancelled path. No changed SDK timeout.
+
+Local authoring evidence: Swift 6.2.1 Linux parse-only succeeds for the
+exact new source blob; isolated signal/gate definitions compile in
+Swift language mode 6 and pass 50 cancellation-flag observations
+(25 normal and 25 externally cancelled). Both actual /bin/sh peer
+framing controls (probe and recovery) pass, including IDs and markers.
+These are not full SDK typechecking, Swift 6.4.2 native transport
+execution or proof of a route-admission defect.
+
+Run only the new focused suite against the unchanged production
+baseline, plus a separate recheck of the confirmed nonterminal callback
+regression. Record exact exit codes and raw logs for both legs. A valid
+pre-cancel admission RED requires observed cancelled-at-entry plus
+actual peer ADMITTED/RX evidence, positive control and clean receipt.
+If only the guard fires or a control fails, investigate instead of
+claiming admission proven. Original five tests remain untouched.
+No production changes yet. After accepted reproduction, implement the
+minimal cancellation/route-admission correction, rerun all seven
+functions in Debug/Release and full Core suite. No release decision.
