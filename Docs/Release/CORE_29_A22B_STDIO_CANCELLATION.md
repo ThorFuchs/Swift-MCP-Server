@@ -155,3 +155,67 @@ claiming admission proven. Original five tests remain untouched.
 No production changes yet. After accepted reproduction, implement the
 minimal cancellation/route-admission correction, rerun all seven
 functions in Debug/Release and full Core suite. No release decision.
+
+
+## RED2 accepted; scoped GREEN implementation prepared
+
+[Native RED2 receipt](https://github.com/ThorFuchs/Swift-MCP-Server/issues/29#issuecomment-7196247273):
+`core-a22b1-red2-dwY7BO9Q.tar.gz`, 5,392 bytes, SHA-256
+`c801a99dd6b5e9a669d6a18df0a9170e444345128e6c17265e1612de0ea5f472`.
+Actual archive reopened and both logs inspected. Exact test-only commit
+`a7738088965943f805389a5adf10245f9165b955`, tree
+`81bc973949007c62769e91fbde502c0aaa60476e`, actual test blob receipts
+match remote. Native build successful (71.09 s and 1.18 s incremental);
+both test exits 1, both tee exits 0. All six dependency hashes unchanged,
+clean final status. Three-workspace 13-pin receipt is static only.
+
+Ordinary finite-peer control PASS (0.004 s). Precancel RED (0.002 s,
+four assertions): cancelled-at-entry true, real child RX request 71,
+ADMITTED, CLEAN, outcome serverExited, guard=false, recovery=false.
+No callback delivered on this run. Nonterminal callback failure again
+RED (0.005 s, two assertions): listen followed by recovery, no cancel
+frame and no cancellation ID. The two defects are now independently
+reproduced without timeout evidence.
+
+Production commit `35b9186e19855ec1b9a27045db7d8fe0f222aaba` changes only
+`Sources/MCPClientStdio/StdioClientTransport.swift`, blob
+`f387f498bac78d0ca67e727ed63ec901d96eb810`. Both native RED test files
+remain byte-identical.
+
+- Check cancellation before request preparation and again under the
+  route-admission mutex. A cancellation handler that ran before route
+  registration cannot be followed by unnoticed admission.
+- Prepare the correlated cancellation line before admission (an encoding
+  failure is returned before the request is issued). Every admitted route
+  owns a distinct internal UUID, its cancellation bytes and a terminal
+  receipt flag. No new public API.
+- Retire only the matching route identity. Enqueue cancel for a still
+  active request on the existing outgoing stream under the same mutex,
+  before releasing the slot and resuming the caller. Preserve the typed
+  callback error. The channel may already be closed; enqueue is not
+  proof of physical delivery in that case.
+- Mark terminal receipt before delivering its callback. No cancellation
+  frame for a terminal response even when the callback throws.
+- Continuations are resumed outside the lock; no extra tasks, deadlines,
+  dependency or protocol-reference changes.
+
+This prevents double retirement of the same local route, not arbitrary
+late-wire-ID aliasing, full callback join, reentrant request progress,
+remote cancellation or cumulative queue bounds. Those remain explicit
+A2.2b.2–5 gates. A sender's cancellation is not proof that provider
+resources have been released.
+
+Authoring check: isolated Swift 6.2.1 Linux harness compiled in Swift
+language mode 6 with the changed Route, State, exchange/route/retire
+logic and stub codec, request and outgoing stream. Six controls pass:
+pre-cancel without output, active and terminal callback errors with
+recovery, active cancellation, cancellation during terminal callback,
+and pre-cancelled same-ID caller leaving an active route intact. This
+does not exercise real Swift-JSON, SwiftSubprocess, native stdio or
+full SDK compilation. No native GREEN result claimed yet.
+
+Next: exact-candidate native GREEN, 7/7 focused functions in Debug,
+7/7 in optimized Release, then 368/368 full locked Debug functions
+with real fixtures. Keep original RED receipts and both test blobs.
+No PR or merge until native GREEN and subsequent qualification.
+Final release gate NOT_EVALUATED.
