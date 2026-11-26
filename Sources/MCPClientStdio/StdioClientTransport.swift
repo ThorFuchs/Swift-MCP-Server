@@ -69,9 +69,12 @@ public final class StdioClientTransport: ClientTransport, Sendable {
     }
 
     private struct Route: Sendable {
+        let identity: UUID
         let receive: @Sendable (Data) async throws -> Void
         let done: CheckedContinuation<Void, any Error>
         let progressToken: String?
+        let cancellationLine: [UInt8]
+        var terminalReceived = false
     }
     private struct State: Sendable {
         var outgoing: AsyncStream<[UInt8]>.Continuation?
@@ -166,16 +169,24 @@ public final class StdioClientTransport: ClientTransport, Sendable {
 
     /// Sends a request on the active child; receiver suspension provides backpressure. Pending requests fail at stdout EOF.
     public func exchange(_ request: OutgoingRequest, receive: @escaping @Sendable (Data) async throws -> Void) async throws {
+        try Task.checkCancellation()
+        let identity = UUID()
         let key = Self.key(request.id.value)
         let token = (try? WireCodec.parse(Array(request.body), limits: .balanced).result)?
             .objectValue?["params"]?.objectValue?["_meta"]?.objectValue?["progressToken"]?.stringValue
         guard !request.body.contains(0x0A) else { throw StdioClientTransportError.messageTooLarge }
+        // Prepare the cancellation before admitting a request that may need it.
+        let cancellationLine = try Self.cancellation(request.id)
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (done: CheckedContinuation<Void, any Error>) in
                 let refused: (any Error)? = state.withLock { state in
+                    // Linearize cancellation and admission with the same lock.
+                    // The handler may already have run before a route existed.
+                    guard !Task.isCancelled else { return CancellationError() }
                     guard state.running, let outgoing = state.outgoing else { return StdioClientTransportError.notRunning }
                     guard state.routes.count < configuration.maximumPendingRequests, state.routes[key] == nil else { return StdioClientTransportError.busy }
-                    state.routes[key] = Route(receive: receive, done: done, progressToken: token)
+                    state.routes[key] = Route(identity: identity, receive: receive, done: done,
+                        progressToken: token, cancellationLine: cancellationLine)
                     if case .terminated = outgoing.yield(Array(request.body) + [0x0A]) {
                         state.routes[key] = nil
                         return StdioClientTransportError.serverExited
@@ -185,11 +196,9 @@ public final class StdioClientTransport: ClientTransport, Sendable {
                 if let refused { done.resume(throwing: refused) }
             }
         } onCancel: {
-            // Stop waiting at once and tell the server; later messages for this ID are dropped.
-            let (route, outgoing) = state.withLock { state in (state.routes.removeValue(forKey: key), state.outgoing) }
-            guard let route else { return }
-            route.done.resume(throwing: CancellationError())
-            if let line = try? Self.cancellation(request.id) { outgoing?.yield(line) }
+            // Only retire this exchange, never another exchange with the same key.
+            // Queue cancellation before releasing the slot and waking the caller.
+            self.retireRoute(key, identity: identity, cancelIfActive: true)?.done.resume(throwing: CancellationError())
         }
     }
 
@@ -206,13 +215,37 @@ public final class StdioClientTransport: ClientTransport, Sendable {
         } else if object["method"]?.stringValue == "notifications/progress", let token = params?["progressToken"]?.stringValue {
             key = state.withLock { state in state.routes.first { $0.value.progressToken == token }?.key }; terminal = false
         } else { return }
-        guard let key, let route = state.withLock({ $0.routes[key] }) else { return }
+        guard let key, let route = state.withLock({ state -> Route? in
+            guard var route = state.routes[key] else { return nil }
+            if terminal {
+                // Once the terminal frame is received, even a throwing or
+                // cancelled callback must not cancel the completed wire request.
+                route.terminalReceived = true
+                state.routes[key] = route
+            }
+            return route
+        }) else { return }
         do { try await route.receive(line) }
         catch {
-            if let failed = state.withLock({ $0.routes.removeValue(forKey: key) }) { failed.done.resume(throwing: error) }
+            retireRoute(key, identity: route.identity, cancelIfActive: true)?.done.resume(throwing: error)
             return
         }
-        if terminal, let finished = state.withLock({ $0.routes.removeValue(forKey: key) }) { finished.done.resume() }
+        if terminal { retireRoute(key, identity: route.identity, cancelIfActive: false)?.done.resume() }
+    }
+
+    /// The route identity makes retirement exactly once even when the caller's
+    /// cancellation races a receiver's return. A live channel gets the cancel
+    /// before a subsequent request can acquire the slot. An already closed
+    /// channel cannot carry further messages. Resume continuations outside the lock.
+    private func retireRoute(_ key: String, identity: UUID, cancelIfActive: Bool) -> Route? {
+        state.withLock { state in
+            guard let route = state.routes[key], route.identity == identity else { return nil }
+            if cancelIfActive, !route.terminalReceived {
+                state.outgoing?.yield(route.cancellationLine)
+            }
+            state.routes[key] = nil
+            return route
+        }
     }
 
     private func finishAll(resetLifetime: Bool = true) {
