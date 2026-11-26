@@ -236,6 +236,13 @@ public actor Client {
             let token = onProgress == nil ? nil : "progress-\(id)"
             let body = try request(id: id, method: method, params: params + continuation, progressToken: token, logs: onLog != nil)
             let final = Mutex<JSON?>(nil)
+            let subscription: SubscriptionAdmission?
+            if onEvent != nil {
+                guard let requested = params.first(where: { $0.key.string == "notifications" })?.value.objectValue else {
+                    throw ClientError.invalidResponse("missing subscription filter")
+                }
+                subscription = SubscriptionAdmission(id: id, requested: requested)
+            } else { subscription = nil }
             let validator = self.validator, limits = configuration.limits
             try await transport.exchange(OutgoingRequest(id: .integer(JSONNumber(integer: id)), method: method, name: name, body: body, parameterHeaders: parameterHeaders)) { frame in
                 let message = try WireCodec.parse(Array(frame), limits: limits).result
@@ -249,8 +256,11 @@ public actor Client {
                     return
                 }
                 guard let notification = object["method"]?.stringValue, object["id"] == nil else { throw ClientError.invalidResponse("unexpected message") }
+                if subscription != nil, final.withLock({ $0 != nil }) {
+                    throw ClientError.invalidResponse("notification after subscription response")
+                }
                 try await Self.dispatch(notification, params: object["params"], raw: message, token: token, validator: validator,
-                                        onProgress: onProgress, onLog: onLog, onEvent: onEvent)
+                                        onProgress: onProgress, onLog: onLog, onEvent: onEvent, subscription: subscription)
             }
             guard let response = final.withLock({ $0 })?.objectValue else { throw ClientError.noResponse }
             if let error = response["error"] {
@@ -282,6 +292,7 @@ public actor Client {
                 if let state = object["requestState"] { continuation.append(JSONMember("requestState", value: state)) }
             case "complete":
                 if let definition { guard try await validator.validate(result, as: definition) else { throw ClientError.invalidResponse("\(method) result") } }
+                try subscription?.complete(object)
                 return result
             default:
                 guard acceptsExtensionResults, try await validator.validate(result, as: .Result) else {
@@ -352,7 +363,7 @@ public actor Client {
 
     private static func dispatch(_ method: String, params: JSON?, raw: JSON, token: String?, validator: WireValidator,
                                  onProgress: (@Sendable (Progress) async -> Void)?, onLog: (@Sendable (LogMessage) async -> Void)?,
-                                 onEvent: (@Sendable (ListenEvent) async throws -> Void)?) async throws {
+                                 onEvent: (@Sendable (ListenEvent) async throws -> Void)?, subscription: SubscriptionAdmission?) async throws {
         let object = params?.objectValue
         func check(_ definition: FrozenWireDefinition) async throws {
             guard try await validator.validate(raw, as: definition) else { throw ClientError.invalidResponse(method) }
@@ -370,18 +381,32 @@ public actor Client {
                                     data: object?["data"] ?? .null))
         case "notifications/subscriptions/acknowledged":
             try await check(.SubscriptionsAcknowledgedNotification)
+            try subscription?.acknowledge(object)
             try await onEvent?(.acknowledged(object?["notifications"] ?? .null))
-        case "notifications/tools/list_changed": try await check(.ToolListChangedNotification); try await onEvent?(.toolsChanged)
-        case "notifications/resources/list_changed": try await check(.ResourceListChangedNotification); try await onEvent?(.resourcesChanged)
-        case "notifications/prompts/list_changed": try await check(.PromptListChangedNotification); try await onEvent?(.promptsChanged)
+        case "notifications/tools/list_changed":
+            try await check(.ToolListChangedNotification)
+            try subscription?.admit(method, params: object)
+            try await onEvent?(.toolsChanged)
+        case "notifications/resources/list_changed":
+            try await check(.ResourceListChangedNotification)
+            try subscription?.admit(method, params: object)
+            try await onEvent?(.resourcesChanged)
+        case "notifications/prompts/list_changed":
+            try await check(.PromptListChangedNotification)
+            try subscription?.admit(method, params: object)
+            try await onEvent?(.promptsChanged)
         case "notifications/resources/updated":
             try await check(.ResourceUpdatedNotification)
+            try subscription?.admit(method, params: object)
             try await onEvent?(.resourceUpdated(uri: object?["uri"]?.stringValue ?? ""))
         case "notifications/cancelled":
             try await check(.CancelledNotification)
         default:
             // Extension notifications (for example notifications/tasks) on a listen stream.
-            if let onEvent { try await onEvent(.notification(method: method, params: params ?? .null)) }
+            if let onEvent {
+                try subscription?.admit(method, params: object)
+                try await onEvent(.notification(method: method, params: params ?? .null))
+            }
         }
     }
 

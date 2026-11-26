@@ -81,6 +81,19 @@ Transports:
   exchange, including across input rounds and callbacks. A list-changed event
   is delivered to the caller, who may explicitly relist; the client neither
   starts background refreshes nor discards validation solely on receipt of an event.
+- **Subscriptions.** Each typed `listen` exchange checks the actual request ID in
+  subscription metadata before delivering an ACK or event. An ACK must be first
+  and unique, and its known Core filter must be a subset of the requested filter.
+  Subsequent Core events must match the acknowledged filter (resource URI identity
+  is exact, not normalized). A successful terminal result must follow an ACK and
+  carry the same subscription ID; invalid sequences fail with
+  `ClientError.invalidResponse` before any invalid event reaches the callback.
+  Ordinary server error responses remain typed errors, including rejection before
+  an ACK. Unknown extension filter members and event payloads are preserved for
+  their extension consumers; Core checks their event correlation and ACK ordering,
+  not their extension-specific semantics. The caller still owns the listen task;
+  no automatic resubscription, transport buffering or cancellation-lifetime change
+  is introduced by these checks.
 - **Raw values.** Typed views keep the raw JSON, so schemas pass through unchanged and are
   never dereferenced over the network.
 - **Compatibility.** A result without `resultType` is `complete`. `-32022` is retried
