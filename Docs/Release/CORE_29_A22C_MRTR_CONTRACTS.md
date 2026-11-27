@@ -164,3 +164,106 @@ coordinated to avoid concurrent heavy Studio builds; separate analysis
 and test authoring can proceed independently. Integrate serially,
 requalify exact resulting tree; #29 remains open, final release_gate
 NOT_EVALUATED. No production fix in this test-only batch.
+
+
+## A2.2c.0 — native RED receipt (accepted 2026-11-27)
+
+Historical predictions and authoring-only statuses above describe the
+test-only preparation, not the current status.
+[Reviewed native evidence](https://github.com/ThorFuchs/Swift-MCP-Server/issues/29#issuecomment-7229745236).
+Original archive `core-a22c-red-2WtdygvZ.tar.gz`, 32,671 bytes,
+SHA-256 `ab67befdd99ae7110ec32e94b81b515783f62a98501a39a6b096c4b00a6f0a31`,
+31 unique members, 29 regular files. Exact test-only commit
+`5e8ef325e96828498ed2261f8753a0131affeb8c`, tree
+`95b801563f0500470501be13cdcbca35933e2028`.
+Seven archived source blobs independently rehashed and match; six
+dependency hashes match before/after and verifier PASS, clean checkout,
+three static 13-pin receipts agree. Native macOS 27.3 ARM64, Swift 6.4.2,
+Xcode 27.2. Successful build 202.33 s, test run 4.794 s,
+24 named functions, 18 PASS, six RED, 16 issues. Exit 1; tee 0; inventory
+and integrity PASS. No observed compiler warning/error, timeout or
+guard failure. Negative tests failed by unexpected successful completion
+and unintended host/retry or call-count witnesses, not compile failure.
+
+| Reproduced RED | Issues | Assigned increment |
+| --- | ---: | --- |
+| unsupportedCoreMethodRejectsInputRequiredBeforeHost | 2 | 1a |
+| wrongJSONRPCVersionCannotTriggerHost | 2 | 1a |
+| acceptedFormCannotOmitRequiredContent | 2 | 1b |
+| acceptedURLCannotReturnFormContent | 2 | 1b |
+| samplingToolsAndToolChoiceRequireAdvertisedCapability | 4 | 1c |
+| directAnswerValidatesMalformedKnownRequestsBeforeHost | 4 | 1c |
+
+The three unexpected controls (absence of both input fields, non-file
+root, pre-cancelled direct answer) passed on the observed baseline.
+Do not infer general admission/cancellation invariants or claim a proven
+mechanism from these outcomes. No new production fix for those cases.
+
+## A2.2c.1 — focused GREEN candidate (native qualification pending)
+
+Maintainer-authorized production edits are limited to Client.swift.
+Original 24-test blob `1b62d295e3065090dc8eed79092f46ab757599ca`
+and all other production/API/dependency/transport/reference files remain
+unchanged. Three sequential exact-parent production commits:
+
+| Increment | Commit | Client.swift blob |
+| --- | --- | --- |
+| 1a | `45ba1c3247350ed7f6eda8686a654934766cf037` | `5ca37b58d0b9ce7b265f80c7c8fa406aa60e8a05` |
+| 1b | `a56152640afb3bc2610701e700f5687bd303f2c5` | `34d6009ab1c590f186dd0679f3d3ec791804c9b5` |
+| 1c | `f81d0d11a6dd7d43f7c84c16b8ecd7ef675e0465` | `eaf5b91a37c582a13f845cda856c0246a9a1d617` |
+
+1a: reject absent/wrong JSON-RPC version before response or notification
+dispatch. Reject input_required for all seven unsupported *known Core
+client methods* in the frozen ClientRequest union, before invoking host
+or building continuation. Allowed tools/call, resources/read, prompts/get
+and existing extension-owned method behavior unchanged. This enumerates
+the existing Core method family, not a global ban on extension MRTR.
+Existing ID checks, legacy missing resultType and one version retry
+unchanged; broader envelope XOR/error-shape audit remains 1c follow-up
+in A2.2c.2.
+
+1b: inspect typed ElicitationResponse.accept and ElicitationRequest.mode.
+Form accept requires an explicit content object (empty object is possible
+for an empty valid form) and validates it against the actual requested
+schema; URL accept must not carry content. Decline and cancel retain
+existing encoding and validation. No change to public response type or
+standalone JSON encoding. Existing Tasks empty-form control explicitly
+returns an empty JSONObject, not nil. Do not treat URL parsing as user
+approval or automatically open any URL.
+
+1c: reject presence of sampling tools or toolChoice with existing
+unsupportedInput(method:) because configuration advertises sampling:{}
+without tools. This applies to ordinary and direct answers and does not
+add any provider or capability API. Direct answerInputRequests opts into
+per-known-request validation using existing ElicitRequest,
+CreateMessageRequest and ListRootsRequest frozen definitions before
+handler dispatch. Normal MRTR already validates the InputRequests map
+and avoids duplicate checks. Unknown direct extension methods still
+use raw handler params and response checks. Per-entry preflight is not
+a guarantee that an entire mixed direct batch is validated atomically
+before any earlier host callback; that is A2.2c.2. No transport or
+task ownership change.
+
+Authoring checks: all three intermediate exact Client.swift byte sequences
+parsed with local Swift 6.2.1 Linux x86_64; independent Git blob hashes
+match remote readbacks, sole parent chain verified. Inspected existing
+13 Client/TasksClient/SkillsClient/WireCache test source files for affected
+input/handler patterns, including direct Tasks empty form and standalone
+URL response encoding. These checks are source and syntax evidence only,
+not SDK compilation or runtime qualification. Native GREEN NOT_RUN.
+
+### Next gate
+
+Exact detached checkout of the documented candidate on reserved Studio,
+with locked six-file dependency graph and source blob evidence. Run
+24/24 focused Debug, 24/24 focused Release, then full Debug via
+Scripts/test.sh with matching Debug fixtures (16 bundle summaries,
+392 expected test functions). 440 expected cumulative executions;
+preserve stage exit codes, named focused receipts, full logs and
+before/after dependency hashes. Reject incomplete inventory, failed
+control, wrong toolchain, altered source or dependency drift.
+No PR/merge until native receipt reviewed. Follow-up A2.2c.2 extends
+the evidence for envelopes, sampling/content semantics, batch admission,
+Unicode keys, version-retry and cancellation. Final cross-platform
+and actual Stdio/HTTP integration remain A2.2c.3 and depend on current
+integrated A2.2b and latest main. No final API freeze or RC1 GO.
