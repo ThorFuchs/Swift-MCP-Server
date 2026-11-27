@@ -121,3 +121,48 @@ A2.2b.3 addresses remote cancellation, EOF and late-wire-ID correlation;
 A2.2b.4 all cumulative queue/resource bounds and restart; A2.2b.5 actual
 HTTP counterpart. No final API/RC1 decision, tag, dependency change or
 AMD64 qualification in this batch.
+
+
+## Native RED accepted; integrated A2.2b.1 closed (2026-11-27)
+
+The [post-merge CI 46062633342](https://github.com/ThorFuchs/Swift-MCP-Server/actions/runs/46062633342)
+on exact integrated `415f62594e87a573ebea1f2bb701d5c24ad92cc1` completed SUCCESS at
+20:44:53 UTC (21:44:53 CET). Raw jobs 140720307091 and 140720307360
+confirm Swift 6.4.2, actual macOS arm64/Linux aarch64 checkouts, 368
+passing functions each across 16 bundle summaries, 15/15 macOS DocC
+and successful symbol inventory, six unchanged dependency files on
+each platform; no observed compiler warning or issue diagnostic.
+Optimized step intentionally skipped for push. A2.2b.1 accepted total
+3,326 planned executions plus 368 successful Debug executions from
+the interrupted first optimized attempt = 3,694 cumulative (not unique).
+No AMD64 or final RC1 claim.
+
+Original maintainer archive `core-a22b2-red-EkYp370e.tar.gz`,
+13,355 bytes, SHA-256
+`47e50b3bcc13a687246f61c57db21274a63bb2c7109f987eb06fe9a4ce18a7aa`.
+Reopened without extraction, 20 regular members. Exact RED
+`1b4b9d8dcc6e3a9cdf64e88bce3b65da03432c80`, tree `a9043d656b4c285c322dd02ee2ea6564adf5aed9`.
+The two archived Swift sources independently Git-blob hashed:
+`ce802ba4b2eaa1e8a1c8071175a561849b2e4b00` (test),
+`f387f498bac78d0ca67e727ed63ec901d96eb810` (production).
+Other test blob receipts preserved; six before/after dependency
+hashes identical, final working tree clean, static 13-pin comparison
+for three workspaces, not actual checkout graph verification.
+macOS 27.3 arm64 / Swift 6.4.2 / Xcode and SDK 27.2. Build
+129.56 s, test execution 10.146 s, test exit 1, tee exit 0,
+integrity PASS; 1 control PASS and 3 reproduced RED, nine issues.
+
+Both joining tests observe cancelled caller return while entered=1,
+exited=0 and cancelled=false; receiver subsequently exits without
+cancellation. Nonterminal request sends exactly one cancel ID 71
+before recovery 73; terminal request sends none. No join guard.
+The reentrant peer receives listen 71 and nested 72, emits outer and
+nested terminal frames, then explicit nested guard fires. Outcome
+nestedDeadline, trace [outer-enter]; both requests cancelled, recovery
+73 succeeds and peer CLEAN. Exact accepted progress RED, not mere
+suite timeout. All three negative predictions confirmed. No
+production change until after this accepted receipt.
+
+A2.2c, A2.2d, A2.3 now run on separate branches from integrated base.
+This branch owns MCPClientStdio only; avoid changing shared Client.swift,
+configuration, reference or dependency files. Merge remains serialized.
