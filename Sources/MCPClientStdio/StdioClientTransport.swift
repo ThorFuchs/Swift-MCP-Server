@@ -15,9 +15,11 @@ import SystemPackage
 public enum StdioClientTransportError: Error, Sendable, Equatable {
     /// `exchange` was called while `run()` is not active.
     case notRunning
-    /// `run()` was called while it is already running.
+    /// `run()` was called while it is already running or a previous exchange
+    /// is still unwinding its caller-owned receiver.
     case alreadyRunning
-    /// More concurrent requests than `maximumPendingRequests`.
+    /// More concurrent requests than `maximumPendingRequests`, or an exchange
+    /// whose bounded delivery inbox cannot accept another frame.
     case busy
     /// The server closed its output or exited; in-flight requests are lost.
     case serverExited
@@ -68,13 +70,25 @@ public final class StdioClientTransport: ClientTransport, Sendable {
         }
     }
 
+    // Per-route bound, in addition to the existing per-line byte limit. A
+    // blocked receiver must not block demultiplexing other admitted routes.
+    // Overload fails that exchange explicitly rather than silently losing data.
+    private static let maximumBufferedFrames = 16
+
+    private struct Frame: Sendable {
+        let bytes: Data
+        let terminal: Bool
+    }
     private struct Route: Sendable {
         let identity: UUID
-        let receive: @Sendable (Data) async throws -> Void
-        let done: CheckedContinuation<Void, any Error>
+        let inbox: AsyncStream<Frame>.Continuation
         let progressToken: String?
         let cancellationLine: [UInt8]
+        var queuedFrames = 0
+        var queuedBytes = 0
         var terminalReceived = false
+        var stopped = false
+        var failure: StdioClientTransportError?
     }
     private struct State: Sendable {
         var outgoing: AsyncStream<[UInt8]>.Continuation?
@@ -94,15 +108,16 @@ public final class StdioClientTransport: ClientTransport, Sendable {
 
     /// Launches the server and serves exchanges until it exits, `shutdown()` closes its
     /// input, or the calling task is cancelled. Outstanding requests fail with
-    /// `serverExited` when stdout ends. The run owner joins the input writer and
+    /// `serverExited` when stdout ends without a terminal response (after
+    /// admitted frames are delivered). The run owner joins the input writer and
     /// stderr reader and observes the reaped child's termination status. A
     /// nonzero or signal exit throws `unsuccessfulTermination`; caller
     /// cancellation is reported as `CancellationError`.
     public func run() async throws {
-        // Outgoing lines are bounded by the pending-request limit plus one cancellation each.
+        // Outgoing queue accounting is a separate transport-bound audit.
         let (lines, outgoing) = AsyncStream.makeStream(of: [UInt8].self)
         try state.withLock { state in
-            guard !state.running else { throw StdioClientTransportError.alreadyRunning }
+            guard !state.running, state.routes.isEmpty else { throw StdioClientTransportError.alreadyRunning }
             state.running = true; state.outgoing = outgoing
         }
         defer { finishAll() }
@@ -133,7 +148,7 @@ public final class StdioClientTransport: ClientTransport, Sendable {
                         var reader = LineReader(limit: limit)
                         for try await chunk in execution.standardOutput {
                             for line in try chunk.withUnsafeBytes({ try reader.feed(Array($0)) }) where !line.isEmpty {
-                                try await self.route(Data(line))
+                                self.route(Data(line))
                             }
                         }
                         // No further response is possible. End exchanges and
@@ -167,7 +182,12 @@ public final class StdioClientTransport: ClientTransport, Sendable {
 
     // MARK: Exchanges
 
-    /// Sends a request on the active child; receiver suspension provides backpressure. Pending requests fail at stdout EOF.
+    /// Sends a request on the active child. The caller executes its own ordered
+    /// receiver; the shared reader never awaits host code. At most 16 queued
+    /// frames and `maximumMessageBytes` queued payload bytes per exchange are
+    /// retained, in addition to the frame being delivered. Overflow fails the
+    /// exchange with `busy` and cancels a still-active wire request. The slot
+    /// stays owned until the caller's receiver has unwound.
     public func exchange(_ request: OutgoingRequest, receive: @escaping @Sendable (Data) async throws -> Void) async throws {
         try Task.checkCancellation()
         let identity = UUID()
@@ -175,92 +195,142 @@ public final class StdioClientTransport: ClientTransport, Sendable {
         let token = (try? WireCodec.parse(Array(request.body), limits: .balanced).result)?
             .objectValue?["params"]?.objectValue?["_meta"]?.objectValue?["progressToken"]?.stringValue
         guard !request.body.contains(0x0A) else { throw StdioClientTransportError.messageTooLarge }
-        // Prepare the cancellation before admitting a request that may need it.
         let cancellationLine = try Self.cancellation(request.id)
+        let (frames, inbox) = AsyncStream.makeStream(of: Frame.self, bufferingPolicy: .bufferingOldest(Self.maximumBufferedFrames))
         try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { (done: CheckedContinuation<Void, any Error>) in
-                let refused: (any Error)? = state.withLock { state in
-                    // Linearize cancellation and admission with the same lock.
-                    // The handler may already have run before a route existed.
-                    guard !Task.isCancelled else { return CancellationError() }
-                    guard state.running, let outgoing = state.outgoing else { return StdioClientTransportError.notRunning }
-                    guard state.routes.count < configuration.maximumPendingRequests, state.routes[key] == nil else { return StdioClientTransportError.busy }
-                    state.routes[key] = Route(identity: identity, receive: receive, done: done,
-                        progressToken: token, cancellationLine: cancellationLine)
-                    if case .terminated = outgoing.yield(Array(request.body) + [0x0A]) {
-                        state.routes[key] = nil
-                        return StdioClientTransportError.serverExited
-                    }
-                    return nil
+            try state.withLock { state in
+                try Task.checkCancellation()
+                guard state.running, let outgoing = state.outgoing else { throw StdioClientTransportError.notRunning }
+                guard state.routes.count < configuration.maximumPendingRequests, state.routes[key] == nil else { throw StdioClientTransportError.busy }
+                state.routes[key] = Route(identity: identity, inbox: inbox, progressToken: token,
+                    cancellationLine: cancellationLine)
+                if case .terminated = outgoing.yield(Array(request.body) + [0x0A]) {
+                    state.routes[key] = nil
+                    throw StdioClientTransportError.serverExited
                 }
-                if let refused { done.resume(throwing: refused) }
+            }
+            // Only the exchange owner releases capacity. Its receiver is an
+            // ordinary awaited call on this task, not a spawned task.
+            defer {
+                state.withLock { state in
+                    if state.routes[key]?.identity == identity { state.routes[key] = nil }
+                }
+                inbox.finish()
+            }
+            do {
+                for await frame in frames {
+                    try state.withLock { state in
+                        try Task.checkCancellation()
+                        guard var route = state.routes[key], route.identity == identity else { throw StdioClientTransportError.serverExited }
+                        if let failure = route.failure { throw failure }
+                        route.queuedFrames -= 1
+                        route.queuedBytes -= frame.bytes.count
+                        state.routes[key] = route
+                    }
+                    try await receive(frame.bytes)
+                    try checkExchange(key, identity: identity)
+                    if frame.terminal { return }
+                }
+                try checkExchange(key, identity: identity)
+                // EOF without an admitted terminal response is not success.
+                throw StdioClientTransportError.serverExited
+            } catch {
+                stopExchange(key, identity: identity)
+                // Caller cancellation is authoritative when it races failure.
+                try Task.checkCancellation()
+                throw error
             }
         } onCancel: {
-            // Only retire this exchange, never another exchange with the same key.
-            // Queue cancellation before releasing the slot and waking the caller.
-            self.retireRoute(key, identity: identity, cancelIfActive: true)?.done.resume(throwing: CancellationError())
+            // Stop further admission and send at most one active-wire cancel.
+            // Do not retire the slot or resume an independent continuation:
+            // cooperative host code must unwind on the cancelled caller task.
+            self.stopExchange(key, identity: identity)
         }
     }
 
-    /// Delivers one server line to its request. Awaiting the receiver is the backpressure.
-    private func route(_ line: Data) async throws {
+    private func checkExchange(_ key: String, identity: UUID) throws {
+        try state.withLock { state in
+            try Task.checkCancellation()
+            guard let route = state.routes[key], route.identity == identity else { throw StdioClientTransportError.serverExited }
+            if let failure = route.failure { throw failure }
+        }
+    }
+
+    /// Demultiplexes under one lock, including progress-token lookup. The
+    /// reader cannot suspend on a receiver or a full route inbox.
+    private func route(_ line: Data) {
         guard let message = try? WireCodec.parse(Array(line), limits: .balanced).result, let object = message.objectValue else { return }
         let params = object["params"]?.objectValue
-        let key: String?
-        let terminal: Bool
-        if object["method"] == nil, let id = object["id"] {
-            key = Self.key(id); terminal = true
+        let terminal = object["method"] == nil && object["id"] != nil
+        let directKey: String?
+        let progress: String?
+        if terminal, let id = object["id"] {
+            directKey = Self.key(id); progress = nil
         } else if let subscription = params?["_meta"]?.objectValue?["io.modelcontextprotocol/subscriptionId"] {
-            key = Self.key(subscription); terminal = false
+            directKey = Self.key(subscription); progress = nil
         } else if object["method"]?.stringValue == "notifications/progress", let token = params?["progressToken"]?.stringValue {
-            key = state.withLock { state in state.routes.first { $0.value.progressToken == token }?.key }; terminal = false
+            directKey = nil; progress = token
         } else { return }
-        guard let key, let route = state.withLock({ state -> Route? in
-            guard var route = state.routes[key] else { return nil }
-            if terminal {
-                // Once the terminal frame is received, even a throwing or
-                // cancelled callback must not cancel the completed wire request.
-                route.terminalReceived = true
-                state.routes[key] = route
+        state.withLock { state in
+            let key = directKey ?? state.routes.first { progress != nil && $0.value.progressToken == progress }?.key
+            guard let key, var route = state.routes[key], !route.stopped, !route.terminalReceived else { return }
+            // Terminal receipt ends wire ownership, even if the local receiver
+            // is suspended or the terminal frame exceeds inbox capacity.
+            if terminal { route.terminalReceived = true }
+            if route.queuedFrames >= Self.maximumBufferedFrames || line.count > configuration.maximumMessageBytes - route.queuedBytes {
+                route.failure = .busy
+                Self.stop(&route, outgoing: state.outgoing)
+            } else {
+                switch route.inbox.yield(Frame(bytes: line, terminal: terminal)) {
+                case .enqueued:
+                    route.queuedFrames += 1
+                    route.queuedBytes += line.count
+                    if terminal { route.inbox.finish() }
+                case .dropped:
+                    // Defensive: explicit accounting must prevent a drop.
+                    route.failure = .busy
+                    Self.stop(&route, outgoing: state.outgoing)
+                case .terminated:
+                    route.failure = .serverExited
+                    Self.stop(&route, outgoing: state.outgoing)
+                @unknown default:
+                    route.failure = .serverExited
+                    Self.stop(&route, outgoing: state.outgoing)
+                }
             }
-            return route
-        }) else { return }
-        do { try await route.receive(line) }
-        catch {
-            retireRoute(key, identity: route.identity, cancelIfActive: true)?.done.resume(throwing: error)
-            return
+            state.routes[key] = route
         }
-        if terminal { retireRoute(key, identity: route.identity, cancelIfActive: false)?.done.resume() }
     }
 
-    /// The route identity makes retirement exactly once even when the caller's
-    /// cancellation races a receiver's return. A live channel gets the cancel
-    /// before a subsequent request can acquire the slot. An already closed
-    /// channel cannot carry further messages. Resume continuations outside the lock.
-    private func retireRoute(_ key: String, identity: UUID, cancelIfActive: Bool) -> Route? {
+    private static func stop(_ route: inout Route, outgoing: AsyncStream<[UInt8]>.Continuation?) {
+        guard !route.stopped else { return }
+        route.stopped = true
+        if !route.terminalReceived { outgoing?.yield(route.cancellationLine) }
+        route.inbox.finish()
+    }
+
+    private func stopExchange(_ key: String, identity: UUID) {
         state.withLock { state in
-            guard let route = state.routes[key], route.identity == identity else { return nil }
-            if cancelIfActive, !route.terminalReceived {
-                state.outgoing?.yield(route.cancellationLine)
-            }
-            state.routes[key] = nil
-            return route
+            guard var route = state.routes[key], route.identity == identity else { return }
+            Self.stop(&route, outgoing: state.outgoing)
+            state.routes[key] = route
         }
     }
 
     private func finishAll(resetLifetime: Bool = true) {
-        let routes = state.withLock { state -> [Route] in
+        state.withLock { state in
             state.outgoing?.finish()
-            // stdout EOF closes exchanges immediately, but a second run must
-            // not acquire this transport until the first child has been joined.
+            // Drain already admitted frames in order, including a terminal
+            // received before EOF. An unterminated exchange throws serverExited
+            // after draining. Do not remove routes owned by unwinding callers.
+            for route in state.routes.values { route.inbox.finish() }
+            // The process owner joins its I/O tasks and child. A new run is
+            // refused while any prior caller still owns an exchange slot.
             if resetLifetime {
                 state.running = false
                 state.outgoing = nil
             }
-            defer { state.routes = [:] }
-            return Array(state.routes.values)
         }
-        for route in routes { route.done.resume(throwing: StdioClientTransportError.serverExited) }
     }
 
     private static func key(_ id: JSON) -> String {
