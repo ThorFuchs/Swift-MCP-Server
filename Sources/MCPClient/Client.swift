@@ -32,9 +32,9 @@ public actor Client {
     }
     private struct ToolListing {
         let nextCursor: String
-        let observedNames: Set<String>
+        let observedNames: Set<ScalarText>
     }
-    private var toolMetadata: [String: ToolMetadata] = [:]
+    private var toolMetadata: [ScalarText: ToolMetadata] = [:]
     private var toolListing: ToolListing?
     // Opaque local tickets only: never interpret server cursors as generations.
     private var catalogRevision = UUID()
@@ -78,7 +78,7 @@ public actor Client {
 
         let page = try await page("tools/list", key: "tools", cursor: cursor, definition: .ListToolsResult, Tool.init)
         var kept: [Tool] = []
-        var observations: [String: ToolMetadata] = [:]
+        var observations: [ScalarText: ToolMetadata] = [:]
         for tool in page.items {
             var headers: ToolHeaders?
             var rejection: RejectedTool?
@@ -87,7 +87,7 @@ public actor Client {
                 catch { rejection = RejectedTool(name: tool.name, reason: String(describing: error)) }
             }
             if rejection == nil { kept.append(tool) }
-            observations[tool.name] = ToolMetadata(headers: headers, outputSchema: tool.outputSchema, rejection: rejection)
+            observations[ScalarText(tool.name)] = ToolMetadata(headers: headers, outputSchema: tool.outputSchema, rejection: rejection)
         }
         try Task.checkCancellation()
         // No suspension between admission of a validated page and the commit.
@@ -95,7 +95,7 @@ public actor Client {
         // A concurrent continuation can only commit against the revision it read.
         let mayCommit = head.map { latestListingHead == $0 } ?? (catalogRevision == revision)
         if mayCommit {
-            var observedNames: Set<String>?
+            var observedNames: Set<ScalarText>?
             if head != nil {
                 observedNames = []
             } else if let listing = toolListing, let cursor,
@@ -118,7 +118,11 @@ public actor Client {
             } else {
                 toolListing = nil
             }
-            rejectedTools = toolMetadata.values.compactMap(\.rejection).sorted { $0.name < $1.name }
+            rejectedTools = toolMetadata.values.compactMap(\.rejection).sorted {
+                // Preserve the existing name ordering; distinguish canonical-equivalent names.
+                if $0.name == $1.name { return $0.name.utf8.lexicographicallyPrecedes($1.name.utf8) }
+                return $0.name < $1.name
+            }
             catalogRevision = UUID()
         }
         return Page(items: kept, nextCursor: page.nextCursor, raw: page.raw)
@@ -132,7 +136,7 @@ public actor Client {
         if let arguments { params.append(JSONMember("arguments", value: arguments)) }
         // Pin both halves of the same definition for the entire call, including
         // MRTR and callbacks that may reenter this actor and refresh the catalog.
-        let metadata = toolMetadata[name]
+        let metadata = toolMetadata[ScalarText(name)]
         let headers = transport.mirrorsToolParameters ? metadata?.headers?.headers(for: arguments) ?? [] : []
         let result = try await perform("tools/call", params: params, name: name, definition: .CallToolResult,
                                        acceptsExtensionResults: true, parameterHeaders: headers, onProgress: onProgress, onLog: onLog)
