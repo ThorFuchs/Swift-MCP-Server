@@ -346,14 +346,19 @@ public actor Client {
                 case .form: guard elicitation.form else { throw ClientError.unsupportedInput(method: method) }
                 case .url: guard elicitation.url else { throw ClientError.unsupportedInput(method: method) }
                 }
-                response = try await elicitation.handler(request).json; definition = .ElicitResult
-                // Accepted form content must match the requested schema before it is sent.
-                if response.objectValue?["action"]?.stringValue == "accept", let content = response.objectValue?["content"],
-                   let schema = params.objectValue?["requestedSchema"] {
-                    guard try await validator.conforms(content, to: schema) else {
-                        throw ClientError.invalidResponse("elicitation content does not match requestedSchema")
+                let reply = try await elicitation.handler(request)
+                if case .accept(let content) = reply {
+                    switch request.mode {
+                    case .form(let schema):
+                        guard let content else { throw ClientError.invalidResponse("accepted form without content") }
+                        guard try await validator.conforms(.object(content), to: schema) else {
+                            throw ClientError.invalidResponse("elicitation content does not match requestedSchema")
+                        }
+                    case .url:
+                        guard content == nil else { throw ClientError.invalidResponse("accepted URL with form content") }
                     }
                 }
+                response = try reply.json; definition = .ElicitResult
             case "sampling/createMessage":
                 guard let sampling = configuration.sampling else { throw ClientError.unsupportedInput(method: method) }
                 response = try await sampling(try SamplingRequest(params)).json; definition = .CreateMessageResult
