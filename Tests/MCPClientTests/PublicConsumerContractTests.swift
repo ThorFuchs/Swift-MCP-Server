@@ -135,7 +135,7 @@ private func expectInvalidConsumerResult(_ body: () async throws -> Void) async 
     }
 
     @Test func promptPagesPreserveArgumentsAndRawMetadata() async throws {
-        let first = #"{"resultType":"complete","ttlMs":30,"cacheScope":"private","nextCursor":"","prompts":[{"name":"review","title":"Review","description":"Review code","arguments":[{"name":"source","required":true}]," _unused":1,"_meta":{"example.org/marker":true}}]}"#
+        let first = #"{"resultType":"complete","ttlMs":30,"cacheScope":"private","nextCursor":"","prompts":[{"name":"review","title":"Review","description":"Review code","arguments":[{"name":"source","required":true}],"_meta":{"example.org/marker":true}}]}"#
         let last = #"{"resultType":"complete","ttlMs":0,"cacheScope":"private","prompts":[]}"#
         let script = ConsumerScript([.init("prompts/list", "{}", first), .init("prompts/list", #"{"cursor":""}"#, last)])
         let client = Client(transport: script)
@@ -226,5 +226,53 @@ private func expectInvalidConsumerResult(_ body: () async throws -> Void) async 
         #expect(result.content == [.text("A"), .image(data: Data([0,1,2]), mimeType: "image/png"), .text("B")])
         #expect(result.structuredContent == (try consumerJSON(#"{"value":1}"#)))
         #expect(result.raw == (try consumerJSON(tool)) && script.count == 2)
+    }
+
+    @Test func publicViewsHandlersAndTypedErrorsNeedNoTestableImport() throws {
+        func acceptsSendable<T: Sendable>(_ type: T.Type) {}
+        acceptsSendable(Client.self)
+        acceptsSendable(ClientConfiguration.self)
+        acceptsSendable(ResourceContents.self)
+        acceptsSendable(Content.self)
+        acceptsSendable(PromptMessage.self)
+        acceptsSendable(PromptResult.self)
+        acceptsSendable(Completion.self)
+        acceptsSendable(CompletionReference.self)
+        acceptsSendable(Page<Resource>.self)
+        acceptsSendable(Page<ResourceTemplate>.self)
+        acceptsSendable(Page<Prompt>.self)
+        acceptsSendable(Implementation.self)
+        acceptsSendable(RejectedTool.self)
+        acceptsSendable(LoggingLevel.self)
+        acceptsSendable(SubscriptionFilter.self)
+        acceptsSendable(ClientError.self)
+        acceptsSendable(ElicitationRequest.self)
+        acceptsSendable(ElicitationResponse.self)
+        acceptsSendable(SamplingRequest.self)
+        acceptsSendable(SamplingResponse.self)
+        acceptsSendable(Root.self)
+
+        // Compile public handler signatures without executing handlers here.
+        let config = ClientConfiguration(elicitation: .init { _ in .decline },
+            sampling: { _ in try .text("fixture", model: "local") }, roots: { [] },
+            additionalInputHandlers: ["example.org/input": { _ in .object(try JSONObject()) }],
+            logLevel: .notice)
+        #expect(config.logLevel == .notice && LoggingLevel.allCases.count == 8)
+        let filter = SubscriptionFilter(resourcesListChanged: true, resourceSubscriptions: ["file:///x"],
+            extensions: ["taskIds": .array([.string("t")])])
+        #expect(filter.resourcesListChanged && !filter.toolsListChanged && filter.resourceSubscriptions == ["file:///x"])
+        #expect(filter.extensions["taskIds"] == .array([.string("t")]))
+
+        let details = try consumerJSON(#"{"requiredCapabilities":{"extensions":{"io.modelcontextprotocol/tasks":{}}}}"#)
+        let error = ClientError.server(code: ClientError.Code.missingRequiredCapabilities, message: "missing", data: details)
+        #expect(error == .server(code: -32021, message: "missing", data: details))
+        #expect(error.serverCode == -32021 && error.requiredExtensions == ["io.modelcontextprotocol/tasks"])
+
+        // This is the explicitly non-validating public raw view initializer.
+        // It does not assert that the frozen standard wire schema accepts new types.
+        let block = try consumerJSON(#"{"type":"hologram","depth":3}"#)
+        let raw = try consumerJSON(#"{"resultType":"complete","content":[{"type":"hologram","depth":3}]}"#)
+        let result = ToolResult(raw)
+        #expect(result.raw == raw && result.content == [.unknown(block)])
     }
 }
