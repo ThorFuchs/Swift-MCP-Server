@@ -247,6 +247,7 @@ public actor Client {
             try await transport.exchange(OutgoingRequest(id: .integer(JSONNumber(integer: id)), method: method, name: name, body: body, parameterHeaders: parameterHeaders)) { frame in
                 let message = try WireCodec.parse(Array(frame), limits: limits).result
                 guard let object = message.objectValue else { throw ClientError.invalidResponse("message is not an object") }
+                guard object["jsonrpc"]?.stringValue == "2.0" else { throw ClientError.invalidResponse("invalid JSON-RPC version") }
                 if object["id"] != nil, object["method"] == nil {
                     guard Self.matches(object["id"], id) else { throw ClientError.invalidResponse("response for another request") }
                     try final.withLock { value in
@@ -282,6 +283,14 @@ public actor Client {
             let object = result.objectValue!
             switch object["resultType"]?.stringValue ?? "complete" {
             case "input_required":
+                // Only tools/call, resources/read and prompts/get support MRTR among
+                // frozen Core client methods. Leave extension-owned methods unchanged.
+                switch method {
+                case "server/discover", "tools/list", "resources/list", "resources/templates/list",
+                     "prompts/list", "completion/complete", "subscriptions/listen":
+                    throw ClientError.invalidResponse("unexpected input_required for \(method)")
+                default: break
+                }
                 guard try await validator.validate(result, as: .InputRequiredResult) else { throw ClientError.invalidResponse("InputRequiredResult") }
                 round += 1
                 guard round <= configuration.maximumInputRounds else { throw ClientError.tooManyInputRounds }
