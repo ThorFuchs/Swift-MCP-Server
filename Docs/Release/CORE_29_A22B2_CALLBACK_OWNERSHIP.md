@@ -166,3 +166,105 @@ production change until after this accepted receipt.
 A2.2c, A2.2d, A2.3 now run on separate branches from integrated base.
 This branch owns MCPClientStdio only; avoid changing shared Client.swift,
 configuration, reference or dependency files. Merge remains serialized.
+
+
+## GREEN candidate: caller-owned bounded delivery
+
+Production commit `f4c5c749a8fee483eaacedea66b7effcf49b3102`,
+StdioClientTransport.swift blob `3c3a195dec42ea6eb03bfbb8ead574b2333d16e8`.
+The stdout reader frames, parses and demultiplexes synchronously into
+per-route bounded AsyncStreams; it never awaits host receiver code.
+The exchange caller iterates its own inbox and awaits the receiver
+directly on its own task. No new SDK task, dependency, signature or
+deadline. Cancellation stops admission and queues at most one
+correlated wire cancellation when still active. The slot remains
+occupied until the caller's receiver unwinds. The route UUID guards
+retirement and cancellation. Cancellation observed before completion
+is authoritative; without caller cancellation the original receiver
+error is preserved. Admission checks cancellation under the same
+mutex, and delivery admission checks cancellation before invoking
+host code. A callback already admitted may run on the cancelled
+context; arbitrary noncooperative host code cannot be forcibly stopped.
+
+Explicit local policy: at most 16 waiting frames and at most
+configuration.maximumMessageBytes queued payload bytes per route,
+plus the single frame being delivered. A finite backlog is needed
+for reentrant routing on one shared byte stream. When either bound
+is exceeded, fail the affected exchange with the existing typed
+.busy error, stop delivery rather than silently drop and continue,
+and enqueue one wire cancellation only if no terminal frame has
+been admitted. Other routes remain routable. The .busy documentation
+now includes this overload case (no new enum case or public signature).
+The reader does not apply transport-wide head-of-line blocking to a
+full route. This is a bounded fail-closed policy, not proof of
+complete aggregate transport memory bounds or lossless indefinite
+producer backpressure. The existing outgoing stream remains
+unbounded; its misleading source comment was corrected, its behavior
+not changed. A2.2b.4 owns cumulative queue and resource budgets.
+Per-route capacity is an internal implementation policy chosen for
+this candidate, subject to review before stable release.
+
+Terminal wire receipt is marked under the lock, before callback
+delivery or inbox admission failure. Subsequent same-route frames
+are not admitted. EOF closes inboxes so already admitted frames,
+including a terminal response, may drain in order; missing terminal
+throws serverExited. The process owner still joins the actual child
+and I/O; caller tasks own their callbacks, not the run owner.
+A new run is refused with the existing .alreadyRunning error while
+a previous caller still owns a route, even after process exit.
+This is intentional local isolation. Run cancellation does not
+forcibly cancel separately owned host tasks. Actual remote cancellation,
+late-wire-ID aliasing and teardown of noncooperative receivers remain
+A2.2b.3/4 topics; cancellation delivery is not provider teardown proof.
+
+Four additive black-box boundary functions in
+Tests/MCPClientStdioLifecycleTests/StdioInboxBoundaryTests.swift,
+commit `e3d1095b9b9aaa609e076c0aca6305aed01dbaab`, blob `f21bc9f8eac0b975471e5be6984ffb988dd23bad`:
+
+- cancelledReceiverRetainsSlotUntilItUnwinds: cancellation-insensitive
+  test gate, cancellation signal in host receiver, same/different ID
+  admission refused with one slot, then release and join, exactly one
+  wire cancellation 71 and recovery 73.
+- frameOverflowFailsOnlyTheOverloadedExchange: 32 frames while outer
+  receiver awaits nested 72, large byte budget; nested response arrives
+  after the flood, outer fails busy, no extra callbacks, one cancel 71
+  and successful recovery.
+- byteOverflowFailsOnlyTheOverloadedExchange: three 445-byte individual
+  frames under 512-byte per-line limit but above queued byte budget;
+  same isolation and typed failure contract.
+- admittedTerminalSurvivesChildEOFWhileReceiverIsParked: real child
+  emits terminal and exits; process owner joins while caller receiver
+  remains parked. New run refuses until old slot retires, original
+  terminal completes after release, no spurious cancellation.
+
+These are new GREEN boundary controls, not separately reproduced RED
+claims. Original four RED tests and both seven-function A2.2b.1
+test blobs remain unchanged. No new production changes in the
+parallel MRTR, retained-state or consumer branches.
+
+Authoring (Linux x86_64, Swift 6.2.1): exact new source and test
+parse successfully, Swift-6 typecheck of the candidate exchange,
+route, stop and finishAll logic and both new/RED suites with stub
+JSON/MCP/Subprocess APIs (run implementation substituted). Eight
+isolated executable route/receiver controls passed; twenty repeat
+runs = 160/160 executions of those eight controls, covering active
+and terminal cancellation, slot retention, reentrant order, both
+overflow limits, terminal EOF and restart refusal, active/terminal
+callback errors. Four real /bin/sh peer framing controls passed.
+The actual SwiftSubprocess run implementation, JSON codec, native
+SwiftPM build and Swift 6.4.2 SDK tests have NOT been executed here:
+network resolution unavailable and local toolchain differs.
+Remote production/boundary blobs match the locally parsed sources.
+No native GREEN claimed.
+
+Native GREEN next: exact detached candidate; focused Debug and Release
+15 functions each (7 unchanged A2.2b.1 + 4 original RED + 4 new boundary
+controls), full locked Debug via Scripts/test.sh 376 functions
+expected (368 integrated + 8 new), total 406 cumulative executions.
+Require exactly one pass per named function in each stage, proper
+join and reentrant trace markers, all four boundary receipts, no
+test watchdog/issue and six unchanged dependency bytes, clean source
+and blob receipts. Archive exact new and original RED source bytes
+and actual commands/exits. Preserve failures; no PR or merge before
+native GREEN. Coordinate Studio slots with other audit branches;
+no global runner config change, no release tag or final RC1 GO.
