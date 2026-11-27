@@ -328,15 +328,32 @@ public actor Client {
     /// Answers MRTR input requests (`{key: {"method": …, "params": …}}`) with the configured
     /// handlers and returns the validated responses by key, for extensions that carry input
     /// requests outside `tools/call`, such as `tasks/update`.
-    public func answerInputRequests(_ requests: JSONObject) async throws -> JSON { try await answer(requests) }
+    public func answerInputRequests(_ requests: JSONObject) async throws -> JSON { try await answer(requests, validateRequests: true) }
 
     /// Answers every input request with its handler; results are validated before sending.
-    private func answer(_ requests: JSONObject) async throws -> JSON {
+    private func answer(_ requests: JSONObject, validateRequests: Bool = false) async throws -> JSON {
         var responses: [JSONMember] = []
         for entry in requests {
             let method = entry.value.objectValue?["method"]?.stringValue ?? ""
             let none = JSON.object(try JSONObject())
             let params = entry.value.objectValue?["params"] ?? none
+            // The MRTR envelope already validates its entire InputRequests map.
+            // Extension-owned direct input maps bypass that envelope; validate each
+            // known request before dispatch, without closing the raw extension path.
+            if validateRequests {
+                let requestDefinition: FrozenWireDefinition?
+                switch method {
+                case "elicitation/create": requestDefinition = .ElicitRequest
+                case "sampling/createMessage": requestDefinition = .CreateMessageRequest
+                case "roots/list": requestDefinition = .ListRootsRequest
+                default: requestDefinition = nil
+                }
+                if let requestDefinition {
+                    guard try await validator.validate(entry.value, as: requestDefinition) else {
+                        throw ClientError.invalidResponse("input request for \(method)")
+                    }
+                }
+            }
             let response: JSON, definition: FrozenWireDefinition
             switch method {
             case "elicitation/create":
@@ -361,6 +378,10 @@ public actor Client {
                 response = try reply.json; definition = .ElicitResult
             case "sampling/createMessage":
                 guard let sampling = configuration.sampling else { throw ClientError.unsupportedInput(method: method) }
+                // ClientConfiguration advertises sampling without the tools capability.
+                guard params.objectValue?["tools"] == nil, params.objectValue?["toolChoice"] == nil else {
+                    throw ClientError.unsupportedInput(method: method)
+                }
                 response = try await sampling(try SamplingRequest(params)).json; definition = .CreateMessageResult
             case "roots/list":
                 guard let roots = configuration.roots else { throw ClientError.unsupportedInput(method: method) }
