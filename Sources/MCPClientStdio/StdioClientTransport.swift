@@ -18,8 +18,9 @@ public enum StdioClientTransportError: Error, Sendable, Equatable {
     /// `run()` was called while it is already running or a previous exchange
     /// is still unwinding its caller-owned receiver.
     case alreadyRunning
-    /// More concurrent requests than `maximumPendingRequests`, an already owned
-    /// request ID or progress token, or an exchange with a full delivery inbox.
+    /// More concurrent requests than `maximumPendingRequests`, a reserved
+    /// request ID or progress token, exhausted identity retirement budget,
+    /// or an exchange with a full delivery inbox.
     case busy
     /// The server closed its output or exited; in-flight requests are lost.
     case serverExited
@@ -74,6 +75,11 @@ public final class StdioClientTransport: ClientTransport, Sendable {
     // blocked receiver must not block demultiplexing other admitted routes.
     // Overload fails that exchange explicitly rather than silently losing data.
     private static let maximumBufferedFrames = 16
+    // Shared by active and unresolved retired identities for one child run.
+    // These are logical key charges, not allocator/RSS or aggregate I/O bounds.
+    private static let maximumReservedIdentities = 256
+    private static let maximumReservedIdentityBytes = 256 * 1024
+    private static let identityOverhead = 64
 
     // Wire identities are scalar strings or exact mathematical integers.
     // Swift String canonical equivalence and machine-width numeric narrowing
@@ -92,6 +98,24 @@ public final class StdioClientTransport: ClientTransport, Sendable {
         }
     }
 
+    // Charge the actual stored key. Parsed integer digits are no longer than
+    // their retained lexeme; charge both. Constructed integer spelling is
+    // bounded by the same codec (no exponent-sized dense expansion).
+    private static func identityCharge(_ value: JSON) throws -> Int {
+        switch value {
+        case .string(let text):
+            let bytes = text.utf8.count
+            guard bytes <= maximumReservedIdentityBytes - identityOverhead else { throw StdioClientTransportError.busy }
+            return identityOverhead + bytes
+        case .number(let number) where number.isInteger:
+            let bytes = try WireCodec.write(value, limits: .balanced).result.count
+            let length = max(bytes, number.originalLexeme?.utf8.count ?? 0)
+            guard length <= (maximumReservedIdentityBytes - identityOverhead) / 2 else { throw StdioClientTransportError.busy }
+            return identityOverhead + 2 * length
+        default: throw WireFailure.invalidRequest
+        }
+    }
+
     private struct Frame: Sendable {
         let bytes: Data
         let terminal: Bool
@@ -101,17 +125,53 @@ public final class StdioClientTransport: ClientTransport, Sendable {
         let inbox: AsyncStream<Frame>.Continuation
         let progressToken: WireIdentity?
         let isListen: Bool
+        let reservationCharge: Int
         let cancellationLine: [UInt8]
         var queuedFrames = 0
         var queuedBytes = 0
         var terminalReceived = false
+        var identitiesReusable = false
         var stopped = false
         var failure: StdioClientTransportError?
     }
     private struct State: Sendable {
         var outgoing: AsyncStream<[UInt8]>.Continuation?
         var routes: [WireIdentity: Route] = [:]
+        // A reservation belongs either to a live local route or to an
+        // unresolved retired request. No insertion is needed on cancellation.
+        // ID and token namespaces remain independent.
+        var reservedIDs: Set<WireIdentity> = []
+        var reservedTokens: Set<WireIdentity> = []
+        var reservedBytes = 0
         var running = false
+
+        mutating func reserve(_ key: WireIdentity, token: WireIdentity?, charge: Int) throws {
+            let count = token == nil ? 1 : 2
+            guard !reservedIDs.contains(key),
+                  token.map({ !reservedTokens.contains($0) }) ?? true,
+                  reservedIDs.count + reservedTokens.count <= maximumReservedIdentities - count,
+                  charge <= maximumReservedIdentityBytes - reservedBytes else {
+                throw StdioClientTransportError.busy
+            }
+            reservedIDs.insert(key)
+            if let token { reservedTokens.insert(token) }
+            reservedBytes += charge
+        }
+
+        mutating func release(_ key: WireIdentity, token: WireIdentity?, charge: Int) {
+            reservedIDs.remove(key)
+            if let token { reservedTokens.remove(token) }
+            reservedBytes -= charge
+        }
+
+        mutating func resetReservationsIfIdle() {
+            // EOF alone is not process teardown; nor may a new run overtake
+            // a prior caller still executing its receiver.
+            guard !running, routes.isEmpty else { return }
+            reservedIDs.removeAll()
+            reservedTokens.removeAll()
+            reservedBytes = 0
+        }
     }
 
     /// Configuration used for each caller-owned run.
@@ -136,6 +196,7 @@ public final class StdioClientTransport: ClientTransport, Sendable {
         let (lines, outgoing) = AsyncStream.makeStream(of: [UInt8].self)
         try state.withLock { state in
             guard !state.running, state.routes.isEmpty else { throw StdioClientTransportError.alreadyRunning }
+            state.resetReservationsIfIdle()
             state.running = true; state.outgoing = outgoing
         }
         defer { finishAll() }
@@ -205,16 +266,29 @@ public final class StdioClientTransport: ClientTransport, Sendable {
     /// frames and `maximumMessageBytes` queued payload bytes per exchange are
     /// retained, in addition to the frame being delivered. Overflow fails the
     /// exchange with `busy` and cancels a still-active wire request. The slot
-    /// stays owned until the caller's receiver has unwound.
+    /// stays owned until the caller's receiver has unwound. Request IDs and
+    /// progress tokens reserve one of 256 keys and a shared 256 KiB logical
+    /// identity budget before wire admission. Unanswered or unproven-terminal
+    /// identities stay reserved until the child run and its routes have ended.
     public func exchange(_ request: OutgoingRequest, receive: @escaping @Sendable (Data) async throws -> Void) async throws {
         try Task.checkCancellation()
         let identity = UUID()
-        guard let key = WireIdentity(request.id.value) else { throw WireFailure.invalidRequest }
-        let rawToken = (try? WireCodec.parse(Array(request.body), limits: .balanced).result)?
-            .objectValue?["params"]?.objectValue?["_meta"]?.objectValue?["progressToken"]
+        guard !request.body.contains(0x0A) else { throw StdioClientTransportError.messageTooLarge }
+        // Reserve the actual wire identity, not a potentially inconsistent
+        // metadata ID or token lost through a failed best-effort parse.
+        let message = try WireCodec.parse(Array(request.body), limits: .balanced).result
+        guard let object = message.objectValue,
+              object["jsonrpc"]?.stringValue == "2.0",
+              let rawID = object["id"], let key = WireIdentity(rawID),
+              WireIdentity(request.id.value) == key,
+              let method = object["method"]?.stringValue,
+              ScalarText(method) == ScalarText(request.method),
+              object["result"] == nil, object["error"] == nil else { throw WireFailure.invalidRequest }
+        let rawToken = object["params"]?.objectValue?["_meta"]?.objectValue?["progressToken"]
         let token = WireIdentity(rawToken)
         if rawToken != nil, token == nil { throw WireFailure.invalidRequest }
-        guard !request.body.contains(0x0A) else { throw StdioClientTransportError.messageTooLarge }
+        let charge = try Self.identityCharge(rawID) + (rawToken.map { try Self.identityCharge($0) } ?? 0)
+        guard charge <= Self.maximumReservedIdentityBytes else { throw StdioClientTransportError.busy }
         let cancellationLine = try Self.cancellation(request.id)
         let (frames, inbox) = AsyncStream.makeStream(of: Frame.self, bufferingPolicy: .bufferingOldest(Self.maximumBufferedFrames))
         try await withTaskCancellationHandler {
@@ -222,16 +296,14 @@ public final class StdioClientTransport: ClientTransport, Sendable {
                 try Task.checkCancellation()
                 guard state.running, let outgoing = state.outgoing else { throw StdioClientTransportError.notRunning }
                 guard state.routes.count < configuration.maximumPendingRequests, state.routes[key] == nil else { throw StdioClientTransportError.busy }
-                // Reserve the token for the entire local route lifetime, including
-                // receiver unwind. Never resolve ambiguous ownership by picking
-                // a dictionary entry arbitrarily.
-                if let token, state.routes.values.contains(where: { $0.progressToken == token }) {
-                    throw StdioClientTransportError.busy
-                }
+                // Admission and reservation are atomic with respect to the
+                // reader and cancellation. Refusal emits no request or cancel.
+                try state.reserve(key, token: token, charge: charge)
                 state.routes[key] = Route(identity: identity, inbox: inbox, progressToken: token,
-                    isListen: request.method == "subscriptions/listen", cancellationLine: cancellationLine)
+                    isListen: method == "subscriptions/listen", reservationCharge: charge, cancellationLine: cancellationLine)
                 if case .terminated = outgoing.yield(Array(request.body) + [0x0A]) {
                     state.routes[key] = nil
+                    state.release(key, token: token, charge: charge)
                     throw StdioClientTransportError.serverExited
                 }
             }
@@ -239,7 +311,16 @@ public final class StdioClientTransport: ClientTransport, Sendable {
             // ordinary awaited call on this task, not a spawned task.
             defer {
                 state.withLock { state in
-                    if state.routes[key]?.identity == identity { state.routes[key] = nil }
+                    if let route = state.routes[key], route.identity == identity {
+                        state.routes[key] = nil
+                        // Unanswered and malformed-terminal routes leave the
+                        // pre-reserved keys in place. No eviction or late-frame
+                        // reconciliation can accidentally reopen an identity.
+                        if route.identitiesReusable {
+                            state.release(key, token: route.progressToken, charge: route.reservationCharge)
+                        }
+                        state.resetReservationsIfIdle()
+                    }
                 }
                 inbox.finish()
             }
@@ -319,7 +400,12 @@ public final class StdioClientTransport: ClientTransport, Sendable {
             if !terminal, directKey != nil, !route.isListen { return }
             // Terminal receipt ends wire ownership, even if the local receiver
             // is suspended or the terminal frame exceeds inbox capacity.
-            if terminal { route.terminalReceived = true }
+            if terminal {
+                route.terminalReceived = true
+                // Preserve raw delivery for higher-level response validation,
+                // but a malformed envelope is not proof of reusable identity.
+                route.identitiesReusable = Self.provesTerminal(object, key: key, isListen: route.isListen)
+            }
             if route.queuedFrames >= Self.maximumBufferedFrames || line.count > configuration.maximumMessageBytes - route.queuedBytes {
                 route.failure = .busy
                 Self.stop(&route, outgoing: state.outgoing)
@@ -343,6 +429,25 @@ public final class StdioClientTransport: ClientTransport, Sendable {
             }
             state.routes[key] = route
         }
+    }
+
+    // A structural JSON-RPC terminal, not method-specific schema validation.
+    // A successful listen also has to identify the exact subscription.
+    // Never release a reservation because of a late frame on a retired route.
+    private static func provesTerminal(_ object: JSONObject, key: WireIdentity, isListen: Bool) -> Bool {
+        guard object["jsonrpc"]?.stringValue == "2.0", object["method"] == nil,
+              WireIdentity(object["id"]) == key else { return false }
+        if let result = object["result"] {
+            guard object["error"] == nil, let value = result.objectValue else { return false }
+            if isListen {
+                return WireIdentity(value["_meta"]?.objectValue?["io.modelcontextprotocol/subscriptionId"]) == key
+            }
+            return true
+        }
+        guard let error = object["error"]?.objectValue,
+              error["code"]?.numberValue?.isInteger == true,
+              error["message"]?.stringValue != nil else { return false }
+        return true
     }
 
     private static func stop(_ route: inout Route, outgoing: AsyncStream<[UInt8]>.Continuation?) {
@@ -372,6 +477,7 @@ public final class StdioClientTransport: ClientTransport, Sendable {
             if resetLifetime {
                 state.running = false
                 state.outgoing = nil
+                state.resetReservationsIfIdle()
             }
         }
     }
