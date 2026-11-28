@@ -250,6 +250,10 @@ public actor Client {
                 guard object["jsonrpc"]?.stringValue == "2.0" else { throw ClientError.invalidResponse("invalid JSON-RPC version") }
                 if object["id"] != nil, object["method"] == nil {
                     guard Self.matches(object["id"], id) else { throw ClientError.invalidResponse("response for another request") }
+                    // Presence includes explicit JSON null. A response has exactly one terminal member.
+                    guard (object["result"] != nil) != (object["error"] != nil) else {
+                        throw ClientError.invalidResponse("response must contain exactly one of result or error")
+                    }
                     try final.withLock { value in
                         guard value == nil else { throw ClientError.invalidResponse("second response") }
                         value = message
@@ -265,7 +269,7 @@ public actor Client {
             }
             guard let response = final.withLock({ $0 })?.objectValue else { throw ClientError.noResponse }
             if let error = response["error"] {
-                let failure = Self.serverError(error)
+                let failure = try Self.serverError(error)
                 // UnsupportedProtocolVersionError: retry once when the server says it supports
                 // our only version after all; otherwise report what it supports.
                 if case .server(ClientError.Code.unsupportedProtocolVersion, _, let data) = failure {
@@ -450,10 +454,14 @@ public actor Client {
         return (try? number.integer(as: Int.self)) == id
     }
 
-    private static func serverError(_ error: JSON) -> ClientError {
-        let object = error.objectValue
-        let code = (try? object?["code"]?.numberValue?.integer(as: Int.self)) ?? 0
-        return .server(code: code, message: object?["message"]?.stringValue ?? "", data: object?["data"])
+    private static func serverError(_ error: JSON) throws -> ClientError {
+        guard let object = error.objectValue,
+              let number = object["code"]?.numberValue,
+              let code = try? number.integer(as: Int.self),
+              let message = object["message"]?.stringValue else {
+            throw ClientError.invalidResponse("invalid error object")
+        }
+        return .server(code: code, message: message, data: object["data"])
     }
 }
 
