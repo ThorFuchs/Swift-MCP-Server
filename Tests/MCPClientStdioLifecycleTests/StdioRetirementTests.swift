@@ -147,6 +147,23 @@ private func complete(_ transport: StdioClientTransport, id: Int, token: String?
     }
 }
 
+// Cancellation receipt IDs are JSON numbers, not decimal-format strings.
+// Preserve the raw peer log; compare only these IDs by mathematical value.
+private enum RetirementWireReceipt: Equatable {
+    case cancellation(JSONNumber)
+    case verbatim(String)
+}
+
+private func retirementWireReceipts(_ lines: [String]) throws -> [RetirementWireReceipt] {
+    try lines.map { line in
+        let prefix = "RX:cancel:"
+        guard line.hasPrefix(prefix) else { return .verbatim(line) }
+        let number = try JSONNumber(parsing: String(line.dropFirst(prefix.count)))
+        guard number.isInteger else { throw WireFailure.invalidRequest }
+        return .cancellation(number)
+    }
+}
+
 @Suite(.serialized, .timeLimit(.minutes(1))) struct StdioRetirementCases {
     @Test func unansweredIDAndTokenStayReservedAfterLateFrames() async throws {
         let log = RetirementLog(), trace = Mutex<[String]>([])
@@ -195,11 +212,15 @@ private func complete(_ transport: StdioClientTransport, id: Int, token: String?
         }
         let expected = ["READY"] + (1...127).flatMap { ["RX:probe/retire:\($0)", "RX:cancel:\($0)"] }
             + ["RX:probe/active:128", "RX:probe/retire:128", "RX:cancel:128", "CLEAN"]
-        #expect(log.snapshot == expected)
+        let firstRun = try retirementWireReceipts(log.snapshot)
+        let expectedFirstRun = try retirementWireReceipts(expected)
+        #expect(firstRun == expectedFirstRun)
         try await retirementRun(transport, log: log) { transport in
             try await complete(transport, id: 1, token: "1")
         }
-        #expect(log.snapshot == expected + ["READY", "RX:probe/complete:1", "CLEAN"])
+        let bothRuns = try retirementWireReceipts(log.snapshot)
+        let expectedBothRuns = try retirementWireReceipts(expected + ["READY", "RX:probe/complete:1", "CLEAN"])
+        #expect(bothRuns == expectedBothRuns)
         print("A22B3B_COUNT retired=256 restart=true")
     }
 
