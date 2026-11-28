@@ -261,6 +261,12 @@ public actor Client {
                     return
                 }
                 guard let notification = object["method"]?.stringValue, object["id"] == nil else { throw ClientError.invalidResponse("unexpected message") }
+                guard object["result"] == nil, object["error"] == nil else {
+                    throw ClientError.invalidResponse("notification contains response members")
+                }
+                if let params = object["params"], params.objectValue == nil {
+                    throw ClientError.invalidResponse("notification params must be an object")
+                }
                 if subscription != nil, final.withLock({ $0 != nil }) {
                     throw ClientError.invalidResponse("notification after subscription response")
                 }
@@ -285,7 +291,10 @@ public actor Client {
                 result = .object(try JSONObject(members: Array(original) + [JSONMember("resultType", value: .string("complete"))]))
             }
             let object = result.objectValue!
-            switch object["resultType"]?.stringValue ?? "complete" {
+            guard let resultType = object["resultType"]?.stringValue else {
+                throw ClientError.invalidResponse("resultType must be a string")
+            }
+            switch resultType {
             case "input_required":
                 // Only tools/call, resources/read and prompts/get support MRTR among
                 // frozen Core client methods. Leave extension-owned methods unchanged.
