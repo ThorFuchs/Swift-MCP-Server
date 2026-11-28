@@ -429,3 +429,75 @@ provider cleanup witness remains separate, as do aggregate I/O
 budgets and HTTP ownership. PR #64 remains unchanged, external
 HTTP gate pending. This branch is stacked; reconcile against actual
 integrated main and requalify before its own PR. No merge or release.
+
+
+## A2.2b.3b — first native GREEN attempt and semantic receipt correction
+
+Original maintainer return `core-a22b3b-green-kg9ZflIF.tar.gz`,
+47,807 bytes, SHA-256
+`1ffbc6dc73b8625b3561be1b3f02b10916642dd9089a897572d091be9e8e63e1`.
+Read without extraction into a checkout; 53 unique members / 42 regular
+files. Exact attempted commit 94bed18db0010bc3cde6dfe2ecdfb19809a6a08c,
+tree 273061a9d2f0f5a991b1b75d27fc633baa419782, sole parent
+82c88d2e8791b91ff8447bc2a7a9c0485cb53fc1. Native macOS 27.3 ARM64,
+Apple Swift 6.4.2, Xcode/SDK 27.2. Independently recomputed eight
+archived Swift blob hashes, contract blob, and SHA-256 and Git blob
+hashes of all six archived before/after dependency byte pairs; all
+match receipts and exact remote tree. Clean status, expected diff,
+static 13-pin inventory per workspace, SQLite 1.2.0.
+
+**FAIL_OR_INCOMPLETE**, integrity PASS, retirement NOT_EVALUATED,
+runner exit 1, release_gate NOT_EVALUATED. Focused Debug build
+88.85 s; actual 33 distinct named starts, 32 passes and one failing
+function in 0.900 s. Test exit 1, tee 0, stage receipt FAIL; Release
+and full Debug not run. All 29 outcome markers and 8+4+7 tagged
+READY/CLEAN peer segments present. No observed compiler error,
+compiler warning or watchdog failure. Original
+cancelledUnansweredIDCannotBeReissuedIntoOldResponse passes:
+trace=[], no probe/reuse, correlated cancellation 71, fresh
+recovery 73 and offered late old frame. Five of six new retirement
+functions pass. Do not accept this archive as complete GREEN.
+
+The sole failure is countBudgetIncludesActiveReservationsAndResetsOnRestart,
+two exact array expectations at lines 198 and 202. Peer records
+the raw wire spelling for cancellation IDs. For twelve IDs that
+are multiples of ten (10...120), Swift-JSON 1.9.0 emits a valid
+exponent spelling (1e1, 2e1, ..., 9e1, 1e2, 11e1, 12e1)
+rather than the decimal string expected by the fixture.
+Independently decoded all 128 cancellation receipts in order
+using exact decimal arithmetic. Every mathematical integer is
+correct; no absent/extra/out-of-order method or cancellation,
+no unexpected refusal request, and the fresh child receives
+probe/complete:1. All seven retirement peer inventories match
+the original expected segments when only cancellation numbers
+are compared mathematically. This is a verified fixture assertion
+mismatch, not evidence of a production identity/budget defect.
+Preserve the failed native attempt unchanged.
+
+Test-only correction `4f3f2d6ba53ace9f2428f754291961685fd421b6`, retirement test blob
+629d09e28c11828a0a57fcd89b7236e69853e17a: a private typed receipt
+distinguishes a parsed integer JSONNumber from verbatim strings.
+Only the two offending comparisons use this projection; each
+other receipt and its order/cardinality remains exact, invalid
+or noninteger cancellation spellings fail. Raw peer logs are
+unchanged. No other assertion changed, no production edit, no
+change to any of the prior 27 tests, dependency, task or timeout.
+Reverse the three anchored replacements to recover the original
+archived test bytes. Independently reconstructed local corrected
+source matches remote Git blob; Swift 6.2.1 x86_64 frontend parse
+passes. Actual native SwiftPM build and tests of this correction
+NOT_RUN.
+
+The corresponding launcher checker must compare only RX:cancel
+suffixes using strict JSON number syntax and exact Python Decimal
+integer equality, retaining all other exact wire checks, full
+test outcomes and exit requirements. Nine local complete-checker
+controls: synthetic positive fixture with actual exponent-spelled
+wire receipts accepted; actual failed archive rejected; wrong
+number, quoted number, fractional number, extra cancellation,
+warning, missing marker and wrong count rejected. These are
+checker tests, not native GREEN evidence. The real archive still
+fails the full checker. Repeat exact full 33/33 + 33/33 + 394/394
+matrix, 460 cumulative expected, with corrected immutable source
+and checker. No release or integration authorization. PR #64
+external HTTP gate remains pending.
