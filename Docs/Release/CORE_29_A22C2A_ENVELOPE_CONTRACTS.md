@@ -144,3 +144,68 @@ state, A2.3 consumer APIs; coordinate before modifying shared
 Client.swift and integrate serially. No production fix, transport/API/
 dependency/Reference/CI change, PR, merge or release decision in this
 test-only batch. release_gate NOT_EVALUATED.
+
+
+## Native RED evidence and focused GREEN candidate — 2026-11-28
+
+The [native RED receipt](https://github.com/ThorFuchs/Swift-MCP-Server/issues/29#issuecomment-7230787061)
+was accepted before production changes. Original archive
+`core-a22c2a-red-HqAp1IIu.tar.gz`, 38,356 bytes,
+SHA-256 `23b7c033d4251099bd91a0e34dd6277e2d004e0de204f2c877ffbbf6607da882`.
+Reopened directly for the GREEN sprint: 45 unique members / 38 files;
+24 named functions each started and terminated once, 13 passed,
+11 failed with 39 issues. All predictions confirmed. Six archived
+dependency files rehashed against identical before/after/baseline
+hash receipts; eight archived source/document blobs rehashed.
+Successful native build, expected test exit 1 and integrity/inventory
+PASS. No changes to original test sources.
+
+Three sequential commits on exact RED parent chain:
+
+| Increment | Commit | Client.swift blob |
+| --- | --- | --- |
+| I | `298a0a3df58d8a6fbddad303dfd38c59a9d523d8` | `55b9cdac996d9714da4e8cdeb208695b1b6571f4` |
+| II | `5dbf01a0b6a3314a87a69ce013aa5646fe61aeff` | `82d3232fbe525c9f9c53ab6b7516844bf11d3286` |
+| III | `449d945e24d45bc08a5f132f8702652f08d0091d` | `ebbb68aa07f140665448ef573f62e778610d639f` |
+
+I: require exclusive result/error presence (explicit null is presence)
+at correlated response admission, retain second-response rejection.
+Make private serverError projection throwing: require object, exact
+representable Int code and string message before the caller evaluates
+version retry. Preserve optional data exactly, including JSON null.
+II: after absent-resultType legacy normalization, require string
+discriminator; reject notification response members and non-object
+params before dispatch. Do not close extension payloads or change
+extension-result admission policy.
+III: extend existing post-terminal notification guard to all exchanges,
+preserving subscription diagnostic. input_required is a terminal frame
+for its exchange. No late progress/log callback and no further MRTR
+round when this defensive guard rejects. The public transport contract
+still provides ordered awaited delivery. This is not concurrent
+receive/physical routing/cancellation ownership proof.
+
+Scope: only Client.swift (+26/-8 from test-only RED), with this
+documentation update. Exact original MRTR and envelope tests unchanged.
+No new tasks, public API, transport, dependency, frozen Reference or
+CI edits. No additional policy for version error data or resultType
+extensions, no speculative batch/cancellation changes. All three
+intermediate files reconstructed from the archived RED source using
+unique anchored replacements, parsed with local Swift 6.2.1 Linux
+x86_64, independently Git-blob hashed and matched against remote
+readbacks. Sole parent chain and one-file per-commit scope verified.
+These are source/syntax checks, not native SDK compilation or tests.
+
+### Native GREEN gate
+
+On idle reserved Studio, exact detached candidate, locked dependencies:
+24 focused envelope Debug, 24 focused envelope Release, then full Debug
+via Scripts/test.sh with matching Debug fixtures, expected 416 functions
+in 16 bundle summaries. 464 cumulative successful executions expected.
+Require each named envelope test once per stage and all 24 original
+MRTR tests once in the full regression; fail on missing, duplicate or
+failed receipts, warning/error diagnostics reviewed from raw logs.
+Archive original RED and candidate Client.swift, both original test
+files, source identity, six dependency bytes and hashes, raw stage
+logs, command/tee exits and inventory receipts. Preserve failed stages.
+Native GREEN NOT_RUN. No PR, merge or RC1 GO before evidence review.
+A2.2c.2b–e and integrated real transport qualification remain open.
