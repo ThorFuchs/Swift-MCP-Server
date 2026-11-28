@@ -18,8 +18,8 @@ public enum StdioClientTransportError: Error, Sendable, Equatable {
     /// `run()` was called while it is already running or a previous exchange
     /// is still unwinding its caller-owned receiver.
     case alreadyRunning
-    /// More concurrent requests than `maximumPendingRequests`, or an exchange
-    /// whose bounded delivery inbox cannot accept another frame.
+    /// More concurrent requests than `maximumPendingRequests`, an already owned
+    /// request ID or progress token, or an exchange with a full delivery inbox.
     case busy
     /// The server closed its output or exited; in-flight requests are lost.
     case serverExited
@@ -75,6 +75,23 @@ public final class StdioClientTransport: ClientTransport, Sendable {
     // Overload fails that exchange explicitly rather than silently losing data.
     private static let maximumBufferedFrames = 16
 
+    // Wire identities are scalar strings or exact mathematical integers.
+    // Swift String canonical equivalence and machine-width numeric narrowing
+    // cannot represent this distinction. JSONNumber hashes mathematical value.
+    private enum WireIdentity: Sendable, Hashable {
+        case string(ScalarText)
+        case integer(JSONNumber)
+
+        init?(_ value: JSON?) {
+            guard let value else { return nil }
+            switch value {
+            case .string(let text): self = .string(ScalarText(text))
+            case .number(let number) where number.isInteger: self = .integer(number)
+            default: return nil
+            }
+        }
+    }
+
     private struct Frame: Sendable {
         let bytes: Data
         let terminal: Bool
@@ -82,7 +99,8 @@ public final class StdioClientTransport: ClientTransport, Sendable {
     private struct Route: Sendable {
         let identity: UUID
         let inbox: AsyncStream<Frame>.Continuation
-        let progressToken: String?
+        let progressToken: WireIdentity?
+        let isListen: Bool
         let cancellationLine: [UInt8]
         var queuedFrames = 0
         var queuedBytes = 0
@@ -92,7 +110,7 @@ public final class StdioClientTransport: ClientTransport, Sendable {
     }
     private struct State: Sendable {
         var outgoing: AsyncStream<[UInt8]>.Continuation?
-        var routes: [String: Route] = [:]
+        var routes: [WireIdentity: Route] = [:]
         var running = false
     }
 
@@ -191,9 +209,11 @@ public final class StdioClientTransport: ClientTransport, Sendable {
     public func exchange(_ request: OutgoingRequest, receive: @escaping @Sendable (Data) async throws -> Void) async throws {
         try Task.checkCancellation()
         let identity = UUID()
-        let key = Self.key(request.id.value)
-        let token = (try? WireCodec.parse(Array(request.body), limits: .balanced).result)?
-            .objectValue?["params"]?.objectValue?["_meta"]?.objectValue?["progressToken"]?.stringValue
+        guard let key = WireIdentity(request.id.value) else { throw WireFailure.invalidRequest }
+        let rawToken = (try? WireCodec.parse(Array(request.body), limits: .balanced).result)?
+            .objectValue?["params"]?.objectValue?["_meta"]?.objectValue?["progressToken"]
+        let token = WireIdentity(rawToken)
+        if rawToken != nil, token == nil { throw WireFailure.invalidRequest }
         guard !request.body.contains(0x0A) else { throw StdioClientTransportError.messageTooLarge }
         let cancellationLine = try Self.cancellation(request.id)
         let (frames, inbox) = AsyncStream.makeStream(of: Frame.self, bufferingPolicy: .bufferingOldest(Self.maximumBufferedFrames))
@@ -202,8 +222,14 @@ public final class StdioClientTransport: ClientTransport, Sendable {
                 try Task.checkCancellation()
                 guard state.running, let outgoing = state.outgoing else { throw StdioClientTransportError.notRunning }
                 guard state.routes.count < configuration.maximumPendingRequests, state.routes[key] == nil else { throw StdioClientTransportError.busy }
+                // Reserve the token for the entire local route lifetime, including
+                // receiver unwind. Never resolve ambiguous ownership by picking
+                // a dictionary entry arbitrarily.
+                if let token, state.routes.values.contains(where: { $0.progressToken == token }) {
+                    throw StdioClientTransportError.busy
+                }
                 state.routes[key] = Route(identity: identity, inbox: inbox, progressToken: token,
-                    cancellationLine: cancellationLine)
+                    isListen: request.method == "subscriptions/listen", cancellationLine: cancellationLine)
                 if case .terminated = outgoing.yield(Array(request.body) + [0x0A]) {
                     state.routes[key] = nil
                     throw StdioClientTransportError.serverExited
@@ -248,7 +274,7 @@ public final class StdioClientTransport: ClientTransport, Sendable {
         }
     }
 
-    private func checkExchange(_ key: String, identity: UUID) throws {
+    private func checkExchange(_ key: WireIdentity, identity: UUID) throws {
         try state.withLock { state in
             try Task.checkCancellation()
             guard let route = state.routes[key], route.identity == identity else { throw StdioClientTransportError.serverExited }
@@ -261,19 +287,36 @@ public final class StdioClientTransport: ClientTransport, Sendable {
     private func route(_ line: Data) {
         guard let message = try? WireCodec.parse(Array(line), limits: .balanced).result, let object = message.objectValue else { return }
         let params = object["params"]?.objectValue
-        let terminal = object["method"] == nil && object["id"] != nil
-        let directKey: String?
-        let progress: String?
-        if terminal, let id = object["id"] {
-            directKey = Self.key(id); progress = nil
-        } else if let subscription = params?["_meta"]?.objectValue?["io.modelcontextprotocol/subscriptionId"] {
-            directKey = Self.key(subscription); progress = nil
-        } else if object["method"]?.stringValue == "notifications/progress", let token = params?["progressToken"]?.stringValue {
-            directKey = nil; progress = token
-        } else { return }
+        let terminal = object["method"] == nil
+        let subscription = params?["_meta"]?.objectValue?["io.modelcontextprotocol/subscriptionId"]
+        let directKey: WireIdentity?
+        let progress: WireIdentity?
+        if terminal {
+            guard let key = WireIdentity(object["id"]) else { return }
+            directKey = key; progress = nil
+        } else {
+            // Only notifications (not server requests) may carry these
+            // routing fields. Do not use subscription metadata to override
+            // a progress token or a conflicting cancellation requestId.
+            guard object["id"] == nil, let method = object["method"]?.stringValue else { return }
+            if method == "notifications/progress" {
+                guard subscription == nil, let token = WireIdentity(params?["progressToken"]) else { return }
+                directKey = nil; progress = token
+            } else {
+                guard let key = WireIdentity(subscription) else { return }
+                if method == "notifications/cancelled" {
+                    guard WireIdentity(params?["requestId"]) == key else { return }
+                }
+                directKey = key; progress = nil
+            }
+        }
         state.withLock { state in
             let key = directKey ?? state.routes.first { progress != nil && $0.value.progressToken == progress }?.key
             guard let key, var route = state.routes[key], !route.stopped, !route.terminalReceived else { return }
+            // Subscription notifications belong only to a listen request.
+            // A matching cancellation remains a notification; the subsequent
+            // terminal response (or EOF) decides the exchange outcome.
+            if !terminal, directKey != nil, !route.isListen { return }
             // Terminal receipt ends wire ownership, even if the local receiver
             // is suspended or the terminal frame exceeds inbox capacity.
             if terminal { route.terminalReceived = true }
@@ -309,7 +352,7 @@ public final class StdioClientTransport: ClientTransport, Sendable {
         route.inbox.finish()
     }
 
-    private func stopExchange(_ key: String, identity: UUID) {
+    private func stopExchange(_ key: WireIdentity, identity: UUID) {
         state.withLock { state in
             guard var route = state.routes[key], route.identity == identity else { return }
             Self.stop(&route, outgoing: state.outgoing)
@@ -330,14 +373,6 @@ public final class StdioClientTransport: ClientTransport, Sendable {
                 state.running = false
                 state.outgoing = nil
             }
-        }
-    }
-
-    private static func key(_ id: JSON) -> String {
-        switch id {
-        case .string(let text): "s:" + text
-        case .number(let number): "n:" + ((try? number.integer(as: Int64.self)).map(String.init) ?? "\(number)")
-        default: "x"
         }
     }
 
