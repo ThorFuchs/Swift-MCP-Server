@@ -308,3 +308,124 @@ PR #64 remains exact native-qualified candidate and draft, external
 HTTP receipt pending. This slice is stacked only on that candidate;
 reconcile with actual integrated main before any A2.2b.3 PR. No
 production edit on #64 or main, no release or merge authorization.
+
+
+## A2.2b.3b — bounded retirement implementation and native GREEN gate
+
+[Accepted A2.2b.3a native receipt](https://github.com/ThorFuchs/Swift-MCP-Server/issues/29#issuecomment-7242117685),
+exact base 0833265845c8c0b46cb94a5b903647efb1e4af8f.
+Reopened core-a22b3a-identity-MMDmFGFx.tar.gz (39,730 bytes, SHA-256
+1afe653b100729c32a99d3d87afe13d302381ee5fa67d89b471c4eb1bc158c3f):
+both raw logs 27 starts / 26 passes / sole original retirement RED,
+seven source blobs and six before/after dependency byte pairs rehashed
+to the pinned remote tree. Existing 27 functions unchanged.
+
+The branch was found already advanced during preparation; reviewed
+and reused the existing test-only commit
+016576adffeaf6d21d9710f8e54b0b353f1348a2 and its production successor
+82c88d2e8791b91ff8447bc2a7a9c0485cb53fc1, rather than overwrite them.
+Exact transport blob 6efe79d158be63d630b8453abef55872d63c76d5 and
+StdioRetirementTests.swift blob 1a085eb9839b09e6111be3b6b910a6ba3b0d1c57.
+Relative to accepted 3a: one production file +122/-16, six new test
+functions in one file, and this appended contract.
+
+### Policy and invariants
+
+- One run owns two independent reservation sets, for actual request
+  IDs and progress tokens. Count and charge are reserved under the
+  existing admission mutex before outgoing yield. Refusal sends no
+  request/cancel, terminated outgoing yield rolls back the reservation.
+  A local route continues to own its slot until caller unwind.
+- Internal combined active + retired ceiling: 256 identity keys,
+  256 KiB logical identity charge. One key for an ID, one more for a
+  nonnil token. Charge 64 + UTF-8 bytes per scalar string; integer
+  64 + 2 * max(codec encoded length, retained original lexeme bytes).
+  This bounds charged identity keys, not actual allocator/RSS or
+  aggregate I/O, transient parsing or outgoing queue. Local policy
+  can be stricter than maximumPendingRequests when budget is exhausted.
+  Existing typed busy reports refusal; no new public signature.
+- The actual outgoing body is parsed, with JSON-RPC version, ID,
+  method, and result/error exclusion checked against metadata. This
+  prevents reserving a different identity than the one sent, or
+  missing a token because of a failed best-effort parse. Malformed
+  input may now fail locally; not a complete method-schema audit.
+- At wire terminal receipt separate the existing terminal-delivery
+  decision from proof of reusable identity. A structurally valid
+  result object XOR error object, with integer error code and string
+  message, exact ID and version, and exact subscriptionId for a
+  successful listen, proves wire completion. It need not prove
+  method-specific result validation. Malformed terminal candidates
+  still reach the raw receiver for higher-level validation but do
+  not authorize reuse. Valid-terminal callback failure does not
+  retain identities unnecessarily. Release only at caller unwind.
+- For unanswered/cancelled/stopped or unproven-terminal routes, the
+  pre-reserved keys stay reserved: no cancellation-time insertion,
+  time-based eviction, or late-frame reclamation. Retired ID/token
+  cannot route to a new caller. Fail closed on exhaustion, recover
+  with unused identities only while sufficient budget remains.
+- Clear reservations only when the child run has ended and all
+  prior caller-owned routes are gone. EOF alone does not reset.
+  Existing run ownership, UUID checks, 16-frame inbox limits,
+  cancellation precedence and no added SDK task/deadline retained.
+  A conforming peer does not send additional frames after a genuine
+  terminal; arbitrary malicious duplicates after legal terminal
+  reuse are inherently indistinguishable. This is not a guarantee
+  against such invalid peer behavior.
+
+### Six new boundary functions
+
+unansweredIDAndTokenStayReservedAfterLateFrames: abandon request 71,
+refuse both ID and token reuse before and after offered late frames,
+fresh token and ID continue. countBudgetIncludesActiveReservationsAndResetsOnRestart:
+127 retired two-key reservations plus 2 active keys exhaust 256;
+active result releases its reservation; next abandoned request fills
+budget permanently until the process joins; oldest keys cannot be
+evicted, fresh child can use original keys. byteBudgetRefusesLargeKeysBeforeWireWithCountHeadroom:
+three 65,536-byte ASCII tokens retained, fourth refused; small request
+still succeeds and old token remains reserved.
+terminalResultAndErrorReleaseBothNamespaces: valid result and error
+permit same identities after receiver unwind; ID and token namespaces
+are independent. malformedTerminalCandidatesDoNotAuthorizeReuse:
+missing result/error, malformed error, dual envelope, wrong listen
+subscriptionId remain reserved. mismatchedOutgoingIdentityNeverAcquiresReservationOrWire:
+local exact-ID refusal, both IDs and token still usable afterward.
+
+### Local verification and limitations
+
+Both exact new Swift files independently Git-blob hashed against
+remote and parsed with Swift 6.2.1 x86_64. Swift-language-6 typecheck
+of actual changed state/admission/routing/terminal logic with a
+substituted run body and stub JSON/MCP APIs, including new test
+macros, passed. A disposable local package used Foundation
+JSONSerialization/Decimal and Foundation Process/POSIX pipe reads
+instead of the pinned JSON codec and SwiftSubprocess. Its first
+adapter attempt had escaped slashes on cancellation output; this
+was corrected in the local adapter only. Then six new tests passed
+with actual /bin/sh peer, followed by seven passing functions in
+two suites including the unchanged original reuse regression,
+with exact marker A22B3_REUSE trace=[] and all six retirement
+markers. This is isolated substituted-dependency evidence, not
+actual SDK execution; no native 6.4.2 proof yet. The frozen
+Swift-JSON 1.9.0 balanced string limit (8 MiB) is sufficient for
+the 65,536-byte token witnesses. Original full native RED and 3a
+partial GREEN retained.
+
+### Native acceptance
+
+Exact final immutable candidate, clean detached checkout, locked
+Swift 6.4.2 macOS ARM64 graph. Focused Debug and Release: all 33
+functions each (27 preserved + 6 new), all pass including former
+retirement RED. Full locked Debug via Scripts/test.sh: 394 expected
+(376 A2.2b.2 + 8 original + 4 exact identity + 6 retirement).
+Total 460 cumulative executions, not distinct functions. Require
+all 33 scoped starts/passes exactly once in every stage, 29 exact
+diagnostic markers, exact original reuse RX inventory and absence
+of probe/reuse, 7 new retirement peer READY/CLEAN segments per stage
+(including the fresh process), no extra failure/warning/guard,
+source and six dependency byte pairs unchanged. Preserve raw logs,
+actual command and tee exits, exact source files and check receipts;
+no native GREEN claim until accepted archive. The actual server
+provider cleanup witness remains separate, as do aggregate I/O
+budgets and HTTP ownership. PR #64 remains unchanged, external
+HTTP gate pending. This branch is stacked; reconcile against actual
+integrated main and requalify before its own PR. No merge or release.
