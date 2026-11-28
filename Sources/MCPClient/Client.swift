@@ -344,9 +344,17 @@ public actor Client {
     /// requests outside `tools/call`, such as `tasks/update`.
     public func answerInputRequests(_ requests: JSONObject) async throws -> JSON { try await answer(requests, validateRequests: true) }
 
-    /// Answers every input request with its handler; results are validated before sending.
+    private enum PreparedInput: Sendable {
+        case elicitation(ElicitationRequest, ClientConfiguration.Elicitation)
+        case sampling(SamplingRequest, @Sendable (SamplingRequest) async throws -> SamplingResponse)
+        case roots(@Sendable () async throws -> [Root])
+        case raw(JSON, InputHandler)
+    }
+
+    /// Admit the whole batch before executing any input handler. Host effects cannot
+    /// be rolled back if an already admitted handler or its result later fails.
     private func answer(_ requests: JSONObject, validateRequests: Bool = false) async throws -> JSON {
-        var responses: [JSONMember] = []
+        var prepared: [(key: String, method: String, input: PreparedInput)] = []
         for entry in requests {
             guard let object = entry.value.objectValue, let method = object["method"]?.stringValue else {
                 throw ClientError.invalidResponse("input request must be an object with a string method")
@@ -357,8 +365,8 @@ public actor Client {
             let none = JSON.object(try JSONObject())
             let params = object["params"] ?? none
             // The MRTR envelope already validates its entire InputRequests map.
-            // Extension-owned direct input maps bypass that envelope; validate each
-            // known request before dispatch, without closing the raw extension path.
+            // Direct input maps bypass that envelope; validate known request shapes
+            // before preparing their handlers, without closing the raw extension path.
             if validateRequests {
                 let requestDefinition: FrozenWireDefinition?
                 switch method {
@@ -373,7 +381,7 @@ public actor Client {
                     }
                 }
             }
-            let response: JSON, definition: FrozenWireDefinition
+            let input: PreparedInput
             switch method {
             case "elicitation/create":
                 guard let elicitation = configuration.elicitation else { throw ClientError.unsupportedInput(method: method) }
@@ -382,6 +390,29 @@ public actor Client {
                 case .form: guard elicitation.form else { throw ClientError.unsupportedInput(method: method) }
                 case .url: guard elicitation.url else { throw ClientError.unsupportedInput(method: method) }
                 }
+                input = .elicitation(request, elicitation)
+            case "sampling/createMessage":
+                guard let sampling = configuration.sampling else { throw ClientError.unsupportedInput(method: method) }
+                // ClientConfiguration advertises sampling without the tools capability.
+                guard params.objectValue?["tools"] == nil, params.objectValue?["toolChoice"] == nil else {
+                    throw ClientError.unsupportedInput(method: method)
+                }
+                input = .sampling(try SamplingRequest(params), sampling)
+            case "roots/list":
+                guard let roots = configuration.roots else { throw ClientError.unsupportedInput(method: method) }
+                input = .roots(roots)
+            default:
+                guard let handler = configuration.additionalInputHandlers[method] else { throw ClientError.unsupportedInput(method: method) }
+                input = .raw(params, handler)
+            }
+            prepared.append((entry.key.string, method, input))
+        }
+
+        var responses: [JSONMember] = []
+        for entry in prepared {
+            let response: JSON, definition: FrozenWireDefinition
+            switch entry.input {
+            case .elicitation(let request, let elicitation):
                 let reply = try await elicitation.handler(request)
                 if case .accept(let content) = reply {
                     switch request.mode {
@@ -395,22 +426,15 @@ public actor Client {
                     }
                 }
                 response = try reply.json; definition = .ElicitResult
-            case "sampling/createMessage":
-                guard let sampling = configuration.sampling else { throw ClientError.unsupportedInput(method: method) }
-                // ClientConfiguration advertises sampling without the tools capability.
-                guard params.objectValue?["tools"] == nil, params.objectValue?["toolChoice"] == nil else {
-                    throw ClientError.unsupportedInput(method: method)
-                }
-                response = try await sampling(try SamplingRequest(params)).json; definition = .CreateMessageResult
-            case "roots/list":
-                guard let roots = configuration.roots else { throw ClientError.unsupportedInput(method: method) }
+            case .sampling(let request, let sampling):
+                response = try await sampling(request).json; definition = .CreateMessageResult
+            case .roots(let roots):
                 response = try await roots().json; definition = .ListRootsResult
-            default:
-                guard let handler = configuration.additionalInputHandlers[method] else { throw ClientError.unsupportedInput(method: method) }
+            case .raw(let params, let handler):
                 response = try await handler(params); definition = .Result
             }
-            guard try await validator.validate(response, as: definition) else { throw ClientError.invalidResponse("handler result for \(method)") }
-            responses.append(JSONMember(entry.key.string, value: response))
+            guard try await validator.validate(response, as: definition) else { throw ClientError.invalidResponse("handler result for \(entry.method)") }
+            responses.append(JSONMember(entry.key, value: response))
         }
         return .object(try JSONObject(members: responses))
     }
