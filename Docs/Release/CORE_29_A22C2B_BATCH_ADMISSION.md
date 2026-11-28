@@ -143,3 +143,74 @@ cross-platform qualification remain open. No production, transport,
 API, dependency, frozen Reference or CI changes; no PR, merge, tag
 or release authorization. Coordinate Studio and Client.swift ownership
 with parallel A2.2b, A2.2d and A2.3. release_gate NOT_EVALUATED.
+
+
+## Native RED receipt and focused GREEN candidate — 2026-11-28 CET
+
+The [accepted native RED receipt](https://github.com/ThorFuchs/Swift-MCP-Server/issues/29#issuecomment-7242649683)
+precedes the maintainer-authorized production changes. Original archive
+`core-a22c2b-red-x3IVIHnZ.tar.gz`, 42,915 bytes, SHA-256
+`d99bc8a6ee8db2844678393ab61711a8fab7dc6659028fa852be334f3bc54aaa`.
+Reopened directly: 48 unique members, 17 named terminal results, eight
+PASS and nine RED, 51 issues. All 54 labelled case receipts present,
+31 contract violations, 35 callbacks in 27 cases, 16 wrong rejection
+categories or absent rejection. Every exchange count correct. All
+nine archived source/document blobs and six archived dependency bytes
+independently rehashed; before/after/expected hash lists identical.
+Accepted baseline evidence is not an executed candidate GREEN run.
+
+| Increment | Commit | Client.swift blob |
+| --- | --- | --- |
+| I | `5d5adc65d02e755aa51be862d91436d33671770d` | `26606978a8f6b5cadfe28153a75ed85fd57be42d` |
+| II | `27dee2782d5a8d9663e153a2563e9dbc863c9f5f` | `acf99b5662c492607a0bffa1a5e599b5f02620e9` |
+
+I: require input entry object/string method and optional object params;
+explicit null, scalar or array params are rejected, absent params remain
+an empty object. Apply the shared shape guard in answer. Unknown but
+well-shaped unavailable methods still return unsupportedInput(method:).
+This first increment alone is not an atomic batch guarantee.
+
+II: introduce private Sendable PreparedInput enum holding the already
+projected ElicitationRequest/SamplingRequest and their configured
+handlers, roots handler, or raw extension params and handler.
+Use a local array with the original key string, method and prepared
+input. Admit all entries (known direct frozen-schema validation,
+handler availability, declared elicitation modes, sampling tool
+capability and typed request construction) before entering the
+sequential execution loop. The ordinary MRTR map was already schema
+validated; retain that path without expanding its union. Preserve
+exact existing key construction, raw extension values, response
+validation, typed host errors, mode-specific accept-content rules,
+empty batch and fail-stop execution. No rollback of earlier host work
+after an execution-time error, no partial response map. No new tasks,
+shared retained state, public API, transport, dependency, Reference
+or CI changes. A2.2c.2c cancellation, 2d deeper sampling semantics
+and 2e key identity/budget/retry remain separate; no new guarantee for
+noncooperative hosts or preflight schema compilation.
+
+Both intermediate Client.swift byte sequences independently derived
+from the archived RED source, parsed with Swift 6.2.1 x86_64 Linux and
+matched to remote blob readbacks; exact sole-parent chain and one-file
+scope checked. The actual new enum and answer method also typechecked
+in language mode 6 inside an actor with stub JSON/MCP/validator types.
+This is not full SDK compilation, native execution or proof of actual
+frozen schema evaluation. Production diff from RED +49/-20, no original
+test modifications.
+
+### Scoped native GREEN gate
+
+Run only on reserved Studio, exact detached candidate and locked graph:
+17 batch focused Debug, 17 batch focused Release, 433 full Debug
+via Scripts/test.sh with matching Debug fixtures (16 bundle summaries).
+467 expected cumulative test-function executions. Each stage must
+contain all 54 unique batch case receipts with matched=true,
+exchanges=1 wire/0 direct, host=[]; in full regression also require all
+24 original MRTR functions, 24 envelope functions and 42 envelope case
+receipts. Preserve three original test files and RED Client.swift
+bytes, all six dependency files and hashes, raw logs, stage exits and
+named receipts. Launcher records incomplete stages as HOLD. No
+candidate SDK or native test execution here. Check workspace and
+internal storage again; last RED reported 100 GiB external and
+20 GiB internal. No production/runner settings change beyond the
+two scoped commits. No PR, merge, tag or RC1 GO until native evidence
+review; release_gate NOT_EVALUATED.
