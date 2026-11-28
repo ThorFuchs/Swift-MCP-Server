@@ -267,8 +267,9 @@ public actor Client {
                 if let params = object["params"], params.objectValue == nil {
                     throw ClientError.invalidResponse("notification params must be an object")
                 }
-                if subscription != nil, final.withLock({ $0 != nil }) {
-                    throw ClientError.invalidResponse("notification after subscription response")
+                // input_required is also terminal for this exchange, not for the logical call.
+                if final.withLock({ $0 != nil }) {
+                    throw ClientError.invalidResponse(subscription != nil ? "notification after subscription response" : "notification after response")
                 }
                 try await Self.dispatch(notification, params: object["params"], raw: message, token: token, validator: validator,
                                         onProgress: onProgress, onLog: onLog, onEvent: onEvent, subscription: subscription)
