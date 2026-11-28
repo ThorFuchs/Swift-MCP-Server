@@ -274,7 +274,8 @@ private func listenWitness(_ bytes: Data) throws -> String {
             try await withThrowingTaskGroup(of: Void.self) { group in
                 group.addTask {
                     try await transport.exchange(correlationRequest("subscriptions/listen")) { bytes in
-                        #expect(try listenWitness(bytes) == "ack")
+                        let witness = try listenWitness(bytes)
+                        #expect(witness == "ack")
                         ack.send()
                     }
                 }
