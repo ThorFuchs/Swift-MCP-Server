@@ -166,3 +166,145 @@ Require all eight actual named outcomes and exact traces; four expected
 controls and four hypothesized REDs remain unverified. No production
 fix until accepted reproduction. Run after competing Studio CI/external
 work completes. Preserve failed attempt and new return separately.
+
+
+## RED2 accepted; A2.2b.3a exact wire identity candidate
+
+[Native RED2 acceptance](https://github.com/ThorFuchs/Swift-MCP-Server/issues/29#issuecomment-7238300366).
+Original archive core-a22b3-red2-VThWYg8a.tar.gz, 21,230 bytes, SHA-256
+1661254bfd7281a356689ac3127c0f6c5d162d506fe3dced06e35315da734215.
+Reopened archive and rehashed all six Swift sources, including unchanged
+RED2 test e3f048e2aec3715ce34b6b9360fa43e143d8861e and baseline
+transport 3c3a195dec42ea6eb03bfbb8ead574b2333d16e8. Actual native build
+76.65 s; eight tests in 0.030 s, four controls PASS, four REDs (eight
+issues), test exit 1, tee 0, integrity PASS. Numeric token callback
+missing, canonically equivalent foreign scalar response delivered,
+conflicting server cancellation delivered, and cancelled unanswered ID
+reused into stale response. EOF controls pass. The preceding
+compile-blocked attempt remains preserved.
+
+This slice fixes the first three reproduced defects, not retirement.
+Original eight RED2 functions remain byte-identical; the reuse witness
+must still fail with exactly its original four issues. Do not mark
+the full suite green, skip the test, or weaken its assertions.
+
+### Source and design
+
+Pinned Swift-JSON 1.9.0 revision
+f2a0d12da7028edfbcb0cb307f19a921a3a12d03 (root Package.resolved).
+[JSONNumber.swift](https://github.com/ThorFuchs/Swift-JSON/blob/f2a0d12da7028edfbcb0cb307f19a921a3a12d03/Sources/JSON/Number/JSONNumber.swift),
+blob 64c5763b6c88f05f2effa0669dbf1af1de90683b, explicitly implements
+equality and hash through normalized DecimalComponents, including
+integer/decimal storage and zero identity. ScalarText, blob
+ffc6d9f7e565de985907efec96b26d818d2fa5d8, compares exact UTF-8 bytes.
+No dependency changes or duplicate number canonicalization.
+
+Production commit `7cd30eca8d2520d01a1b94239823ce1d254eb01f`, transport blob
+c6a7be78f9d76f95a0de7608155ab3dcd367877d. Private Hashable WireIdentity
+uses ScalarText or JSONNumber with isInteger; dictionary keys and
+progress tokens share this representation without Int64/Double narrowing,
+description-based fallback or Unicode normalization. Non-integer/invalid
+keys cannot select routes; explicitly supplied malformed progress token
+is refused with existing WireFailure.invalidRequest. The request body
+is still inspected as before; this is not a complete outgoing envelope
+validation audit.
+
+Under the existing mutex, admission reserves a progress token for
+the local route lifetime, including receiver unwind. A duplicate is
+refused with existing busy before sending a request; no arbitrary
+dictionary winner. This intentionally strengthens local admission
+even while a terminal callback is unwinding. The raw transport
+uses OutgoingRequest.method metadata to distinguish listen ownership
+from ordinary requests. Notification routing requires absent top-level
+id and a string method. Progress uses its token, not subscription
+metadata (a progress notification carrying subscriptionId is not
+admitted by this local policy). Other subscription notifications
+require exact subscription identity and a listen owner. Cancellation
+also requires requestId to match subscriptionId. Invalid/conflicting
+correlation is ignored, not delivered to another route. Valid server
+cancellation remains a notification; the terminal response or EOF
+determines the outcome. Higher-level Client schema validation and
+extension semantics are unchanged. Caller-owned callbacks, inbox bounds,
+terminal receipt and route UUID protections unchanged. No new tasks,
+public signature, SDK deadlines or dependency change.
+
+### Additive boundary tests
+
+Test-only commit 0450070ef3ea79275ec5dcb4f87d03ede4237e1f precedes the
+production fix, new StdioExactIdentityTests.swift blob
+9f198976b383f8fcce4eba61c851ab52fc6cea22. Four additional functions:
+- simultaneousScalarDistinctIDsAndTokensRemainIndependent: distinct
+  composed/decomposed IDs and progress tokens live at the same time;
+  actual outer-start, inner-progress, inner-terminal, outer-progress,
+  outer-terminal order, clean recovery.
+- largeMathematicalIntegerIDsAndTokensUseEquivalentSpellings: above
+  Int64 request ID, equivalent exponent notation terminal, numeric
+  progress token 10^23 with exponent notation; no string-token alias.
+- duplicateActiveProgressTokenRefusesSecondRequest: occupied token
+  cannot be used by a distinct ID; exact busy, no request on wire,
+  unique nested request and recovery.
+- subscriptionNotificationsCannotReachOrdinaryRequest: forged
+  subscription cancellation and event at an ordinary request ID are
+  ignored, ordinary terminal and recovery remain successful.
+
+These are additive boundary controls, not independently observed native
+REDs. Original 15 A2.2b.1/2 regressions and eight RED2 functions unchanged.
+
+### Authoring and native scoped acceptance
+
+Local Swift 6.2.1 x86_64: reconstructed the exact archived transport
+via the same anchored replacements and independently Git-blob hashed
+it; exact new test bytes also independently hashed. Both match the
+remote blobs above. Both files parse. Swift-language-6 typecheck of
+the changed route/exchange/stop/lifetime state logic with substituted
+run body, stub JSON/MCP/Subprocess APIs, and new Swift Testing macros
+passes. Five isolated executable controls of that stubbed route logic
+pass (simultaneous scalar IDs/tokens, ordinary integer vs string
+progress, duplicate token refusal, conflicting cancellation and
+non-listen cancellation). Five real /bin/sh framing controls pass
+(including both accepted and hypothetical duplicate-token admission).
+These are not the pinned JSON codec, exact large integer runtime,
+SwiftSubprocess integration or native SDK test results. Local network
+resolution of GitHub unavailable; actual Swift 6.4.2 native build
+and execution NOT_RUN.
+
+Run focused Debug and Release on the final immutable candidate:
+15 preserved A2.2b.1/2 + 8 original A2.2b.3 RED2 + 4 additive = 27
+named functions per mode. Require 26 PASS and exactly one known,
+unfixed retirement witness (cancelledUnansweredIDCannotBeReissuedIntoOldResponse,
+four original issues), command exit 1, tee 0, all expected wire and
+callback receipts, six unchanged dependency bytes and clean source.
+The local runner may classify this exact partial outcome as
+PASS_SCOPED_A22B3A_IDENTITY_WITH_RETIREMENT_RED, with a separate
+retirement status RED and release_gate NOT_EVALUATED. This is not
+a full GREEN or integration decision; an unexpected pass of the
+remaining RED must be investigated as well. No other failing test
+or compile/watchdog failure accepted. Archive actual commands, raw
+logs, sources, dependency byte pairs and the receipt checks.
+
+### A2.2b.3b design gate (not implemented)
+
+The outstanding ID reuse RED and analogous late-progress token reuse
+need a bounded retired-identity policy for the run lifetime. A local
+UUID does not distinguish old wire frames. Reserve enough retirement
+capacity when admitting a request, or use an explicit fail-closed
+admission/poison policy if the budget is exhausted. Account for both
+identity count and retained key bytes, including numeric lexemes;
+no arbitrary eviction reopening a retired identity. Keep request IDs
+and progress-token namespaces separate, and reserve unresolved
+retired tokens as well as IDs so a fresh ID cannot receive old progress.
+Conservative retention until actual process/run teardown is a viable
+first option; terminal reconciliation, if supported, needs proof
+that no valid old frames can still alias and that malformed frames
+cannot release capacity. Test saturation, no silent eviction, recovery
+with distinct identities when budget allows, valid reuse after genuine
+terminal, and reset only after old process and caller routes have
+finished. Real server cleanup remains distinct from synthetic proof.
+Implement only after reviewing the scoped 3a return; full locked Core
+suite, optimized and external qualification then follow on the
+reconciled integrated base.
+
+PR #64 remains exact native-qualified candidate and draft, external
+HTTP receipt pending. This slice is stacked only on that candidate;
+reconcile with actual integrated main before any A2.2b.3 PR. No
+production edit on #64 or main, no release or merge authorization.
