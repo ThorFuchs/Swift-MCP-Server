@@ -123,3 +123,46 @@ A2.2b.3 remains broader than these eight tests. Subsequent slices:
    HTTP ownership A2.2b.5; no speculative API, dependency or deadline
    change, no tag or RC1 GO.
 
+
+
+## First native attempt: compilation blocked; test-only RED2 correction
+
+Maintainer archive `core-a22b3-red-qqYlODMK.tar.gz`, 22,378 bytes,
+SHA-256 `efd16c306dcf3a7891266284ce4860383d4469c1e294cd26fce53fe41e80f768`.
+Opened without extraction: 26 unique members, 25 regular files.
+Exact attempt `fa226f4e624d251097cd7f6dc793176ba6a4c9a6`, tree
+`c6e9e29bdbaaf347354bdac56d75f7cc324f23e3`, expected base
+`d3a0bdcceaca43dd7dc8d05762524928b3293ee4`. All six archived Swift
+files independently Git-blob hashed and matched archived receipts.
+Six before/after dependency hash receipts match, expected two added
+paths, clean status. Three workspaces have 13 matching pins, SQLite
+1.2.0 (static receipt, not native resolution). Native macOS 27.3
+ARM64, Swift 6.4.2, Xcode/SDK 27.2. Syntax preflight passed.
+Test command exit 1, tee exit 0, integrity PASS, release_gate
+NOT_EVALUATED.
+
+**BUILD_BLOCKED, not accepted RED.** Native compiler diagnosed
+`StdioEOFCorrelationTests.swift:277:67` in the nested receiver
+closure: macro expansion of `#expect(try listenWitness(bytes) == "ack")`
+reported "errors thrown from here are not handled". No test started;
+zero of eight contracts executed. No compiler warning observed.
+Keep the original archive and commit.
+
+Test-only correction `e2b2c773e652d3606796a2f891672861052a5a3f`, new test blob
+`e3f048e2aec3715ce34b6b9360fa43e143d8861e`:
+evaluate `let witness = try listenWitness(bytes)` before
+`#expect(witness == "ack")`, then unchanged ack.send().
+Exactly one replacement, reversing it reproduces original test
+bytes. No assertion removed, no change to peer, test guards, predicted
+outcomes, existing tests or production source. Local Swift 6.2.1
+x86_64 frontend parse of exact corrected test and Swift-language-6
+typecheck of an isolated equivalent throwing receiver/expectation
+closure succeed. Not a full SDK typecheck or native execution.
+The remote blob matches the locally parsed corrected bytes.
+
+Repeat the same focused native command on the corrected immutable
+revision with all six source checks and dependency integrity checks.
+Require all eight actual named outcomes and exact traces; four expected
+controls and four hypothesized REDs remain unverified. No production
+fix until accepted reproduction. Run after competing Studio CI/external
+work completes. Preserve failed attempt and new return separately.
