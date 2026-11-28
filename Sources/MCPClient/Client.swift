@@ -348,9 +348,14 @@ public actor Client {
     private func answer(_ requests: JSONObject, validateRequests: Bool = false) async throws -> JSON {
         var responses: [JSONMember] = []
         for entry in requests {
-            let method = entry.value.objectValue?["method"]?.stringValue ?? ""
+            guard let object = entry.value.objectValue, let method = object["method"]?.stringValue else {
+                throw ClientError.invalidResponse("input request must be an object with a string method")
+            }
+            if let params = object["params"], params.objectValue == nil {
+                throw ClientError.invalidResponse("input request params must be an object")
+            }
             let none = JSON.object(try JSONObject())
-            let params = entry.value.objectValue?["params"] ?? none
+            let params = object["params"] ?? none
             // The MRTR envelope already validates its entire InputRequests map.
             // Extension-owned direct input maps bypass that envelope; validate each
             // known request before dispatch, without closing the raw extension path.
